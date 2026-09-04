@@ -1,0 +1,20 @@
+{
+  "name": "rpadevassistant",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "build": "npm run frontend:build",
+    "test": "npm run frontend:test",
+    "backend:restore": "./.dotnet/dotnet restore",
+    "backend:build": "./.dotnet/dotnet build --no-restore",
+    "backend:test": "./.dotnet/dotnet test --no-build",
+    "backend:publish:win": "node scripts/publish-backend-sidecar.mjs win-x64",
+    "frontend:build": "npm run build --workspace frontend",
+    "frontend:test": "npm run test --workspace frontend",
+    "desktop:dev": "npm run tauri:dev --workspace frontend",
+    "desktop:build": "npm run frontend:build && npm run backend:publish:win && npm run tauri:build --workspace frontend"
+  }
+}

@@ -1,0 +1,38 @@
+<Activity
+  xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:ui="http://schemas.uipath.com/workflow/activities"
+  x:Class="Business.CallExternalApi">
+  <Sequence DisplayName="Call External API">
+    <Sequence.Activities>
+      <ui:LogMessage DisplayName="Log API call start" Message="Calling external invoice API" />
+      <ui:HttpRequest DisplayName="Submit invoice API" />
+      <TryCatch DisplayName="Silent exception handler">
+        <TryCatch.Try>
+          <Sequence DisplayName="Try submit">
+            <Sequence.Activities>
+              <Assign DisplayName="Prepare request" />
+            </Sequence.Activities>
+          </Sequence>
+        </TryCatch.Try>
+        <TryCatch.Catches>
+          <Catch x:TypeArguments="x:Object">
+            <ActivityAction x:TypeArguments="x:Object">
+              <Sequence DisplayName="Swallow exception">
+                <Sequence.Activities>
+                  <Assign DisplayName="Ignore exception" />
+                </Sequence.Activities>
+              </Sequence>
+            </ActivityAction>
+          </Catch>
+          <Catch x:TypeArguments="x:Object">
+            <ActivityAction x:TypeArguments="x:Object">
+              <Sequence DisplayName="Empty catch" />
+            </ActivityAction>
+          </Catch>
+        </TryCatch.Catches>
+      </TryCatch>
+      <ui:InvokeWorkflowFile DisplayName="Invoke missing cleanup" WorkflowFileName="Framework\MissingCleanup.xaml" />
+    </Sequence.Activities>
+  </Sequence>
+</Activity>

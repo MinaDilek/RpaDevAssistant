@@ -1,0 +1,26 @@
+<Activity
+  xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:ui="http://schemas.uipath.com/workflow/activities"
+  xmlns:s="clr-namespace:System;assembly=System.Private.CoreLib"
+  x:Class="EmptyCatch">
+  <TryCatch DisplayName="Handle work">
+    <TryCatch.Try>
+      <Sequence DisplayName="Try body">
+        <Sequence.Activities>
+          <Assign DisplayName="Prepare value" />
+        </Sequence.Activities>
+      </Sequence>
+    </TryCatch.Try>
+    <TryCatch.Catches>
+      <Catch x:TypeArguments="s:Exception">
+        <ActivityAction x:TypeArguments="s:Exception">
+          <ActivityAction.Argument>
+            <DelegateInArgument x:TypeArguments="s:Exception" Name="exception" />
+          </ActivityAction.Argument>
+          <Sequence DisplayName="Empty catch" />
+        </ActivityAction>
+      </Catch>
+    </TryCatch.Catches>
+  </TryCatch>
+</Activity>

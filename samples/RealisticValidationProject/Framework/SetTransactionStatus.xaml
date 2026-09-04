@@ -1,0 +1,11 @@
+<Activity
+  xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:ui="http://schemas.uipath.com/workflow/activities"
+  x:Class="Framework.SetTransactionStatus">
+  <Sequence DisplayName="Set Transaction Status">
+    <Sequence.Activities>
+      <ui:LogMessage DisplayName="Log transaction status" Message="Transaction status updated" />
+    </Sequence.Activities>
+  </Sequence>
+</Activity>

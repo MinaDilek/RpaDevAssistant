@@ -1,0 +1,16 @@
+<Activity
+  xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:ui="http://schemas.uipath.com/workflow/activities"
+  x:Class="Business.Login">
+  <Sequence DisplayName="Login">
+    <Sequence.Activities>
+      <ui:Click DisplayName="Click" Selector="&lt;webctrl tag='BUTTON' aaname='Login' idx='3' /&gt;" TimeoutMS="120000" ContinueOnError="True" sap2010.WorkflowViewState.IdRef="ClickLogin_1" xmlns:sap2010="http://schemas.microsoft.com/netfx/2010/xaml/activities/presentation" />
+      <ui:TypeInto DisplayName="Enter Username" Selector="&lt;webctrl tag='INPUT' aaname='Username' /&gt;" TimeoutMS="500" ContinueOnError="True" />
+      <Delay DisplayName="Wait for dashboard" Duration="00:00:06" />
+      <Assign DisplayName="Set fake password" Password="FakeSecret123!" />
+      <ui:LogMessage DisplayName="Log password value" Message="&quot;Password: &quot; + password" />
+      <Assign DisplayName="Read local report" FilePath="C:\Temp\report.xlsx" ContinueOnError="True" />
+    </Sequence.Activities>
+  </Sequence>
+</Activity>

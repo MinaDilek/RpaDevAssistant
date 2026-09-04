@@ -1,0 +1,16 @@
+<Activity
+  xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:ui="http://schemas.uipath.com/workflow/activities"
+  x:Class="Business.NoLoggingWorkflow">
+  <Sequence DisplayName="No Logging Workflow">
+    <Sequence.Activities>
+      <Assign DisplayName="Step 1" />
+      <Assign DisplayName="Step 2" />
+      <ui:Click DisplayName="Click Search Button" Selector="&lt;webctrl tag='BUTTON' aaname='Search' /&gt;" TimeoutMS="30000" />
+      <Assign DisplayName="Step 4" />
+      <Assign DisplayName="Step 5" />
+      <Assign DisplayName="Step 6" />
+    </Sequence.Activities>
+  </Sequence>
+</Activity>

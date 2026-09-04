@@ -1,0 +1,21 @@
+[package]
+name = "rpadevassistant-desktop"
+version = "0.1.0"
+description = "RPA Dev Assistant desktop shell"
+authors = ["RPA Dev Assistant"]
+edition = "2021"
+
+[lib]
+name = "rpadevassistant_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+anyhow = "1"
+log = "0.4"
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-log = "2"

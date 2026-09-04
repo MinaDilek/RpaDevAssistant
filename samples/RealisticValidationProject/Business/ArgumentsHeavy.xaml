@@ -1,0 +1,23 @@
+<Activity
+  xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  x:Class="Business.ArgumentsHeavy">
+  <x:Members>
+    <x:Property Name="in_Arg01" Type="InArgument(x:String)" />
+    <x:Property Name="in_Arg02" Type="InArgument(x:String)" />
+    <x:Property Name="in_Arg03" Type="InArgument(x:String)" />
+    <x:Property Name="in_Arg04" Type="InArgument(x:String)" />
+    <x:Property Name="in_Arg05" Type="InArgument(x:String)" />
+    <x:Property Name="in_Arg06" Type="InArgument(x:String)" />
+    <x:Property Name="in_Arg07" Type="InArgument(x:String)" />
+    <x:Property Name="in_Arg08" Type="InArgument(x:String)" />
+    <x:Property Name="in_Arg09" Type="InArgument(x:String)" />
+    <x:Property Name="in_Arg10" Type="InArgument(x:String)" />
+    <x:Property Name="in_Arg11" Type="InArgument(x:String)" />
+  </x:Members>
+  <Sequence DisplayName="Arguments Heavy">
+    <Sequence.Activities>
+      <Assign DisplayName="Use arguments" />
+    </Sequence.Activities>
+  </Sequence>
+</Activity>

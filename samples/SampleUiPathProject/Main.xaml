@@ -1,0 +1,16 @@
+<Activity
+  xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:ui="http://schemas.uipath.com/workflow/activities"
+  x:Class="Main">
+  <x:Members>
+    <x:Property Name="in_Config" Type="InArgument(x:Object)" />
+  </x:Members>
+  <Sequence DisplayName="Main">
+    <Sequence.Activities>
+      <ui:InvokeWorkflowFile DisplayName="Init settings" WorkflowFileName="Framework\InitAllSettings.xaml" />
+      <ui:InvokeWorkflowFile DisplayName="Get transaction data" WorkflowFileName="Framework\GetTransactionData.xaml" />
+      <ui:InvokeWorkflowFile DisplayName="Process transaction" WorkflowFileName="Business\Process.xaml" />
+    </Sequence.Activities>
+  </Sequence>
+</Activity>

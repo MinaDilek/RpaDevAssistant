@@ -1,0 +1,14 @@
+<Activity
+  xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:ui="http://schemas.uipath.com/workflow/activities"
+  x:Class="Business.SelectorIssues">
+  <Sequence DisplayName="Selector Issues">
+    <Sequence.Activities>
+      <ui:Click DisplayName="Click generated panel" Selector="&lt;webctrl tag='DIV' id='123456789' /&gt;" TimeoutMS="30000" />
+      <ui:Click DisplayName="Click missing timeout legacy button" Selector="&lt;webctrl tag='BUTTON' aaname='Continue' /&gt;" />
+      <ui:OpenBrowser DisplayName="Open legacy browser" Url="https://example.com" />
+      <ui:Click DisplayName="Click complex selector" TimeoutMS="30000" Selector="&lt;html app='chrome.exe' title='Invoice Portal' /&gt;&lt;webctrl tag='DIV' aaname='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' /&gt;" />
+    </Sequence.Activities>
+  </Sequence>
+</Activity>

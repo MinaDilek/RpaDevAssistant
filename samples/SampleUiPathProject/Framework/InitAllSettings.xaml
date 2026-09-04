@@ -1,0 +1,12 @@
+<Activity
+  xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:ui="http://schemas.uipath.com/workflow/activities"
+  x:Class="InitAllSettings">
+  <Sequence DisplayName="Init All Settings">
+    <Sequence.Activities>
+      <ui:GetAsset DisplayName="Get settings asset" />
+      <Delay DisplayName="Wait after init" Duration="00:00:01" />
+    </Sequence.Activities>
+  </Sequence>
+</Activity>

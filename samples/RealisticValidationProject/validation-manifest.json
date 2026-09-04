@@ -1,0 +1,46 @@
+{
+  "expectedScoreRange": {
+    "min": 40,
+    "max": 85
+  },
+  "expectedFindings": [
+    { "ruleId": "RPA001", "workflowPath": "Business/Login.xaml", "minimumCount": 1, "severity": "Warning" },
+    { "ruleId": "RPA002", "workflowPath": "Business/CallExternalApi.xaml", "minimumCount": 1, "severity": "Error" },
+    { "ruleId": "RPA003", "workflowPath": "Business/CallExternalApi.xaml", "minimumCount": 1, "severity": "Error" },
+    { "ruleId": "RPA004", "workflowPath": "Business/Login.xaml", "minimumCount": 1, "severity": "Warning" },
+    { "ruleId": "RPA005", "workflowPath": "Business/CallExternalApi.xaml", "minimumCount": 1, "severity": "Error" },
+    { "ruleId": "RPA006", "workflowPath": "Business/Workflow1.xaml", "minimumCount": 1, "severity": "Suggestion" },
+    { "ruleId": "RPA007", "workflowPath": "Business/Login.xaml", "minimumCount": 1, "severity": "Suggestion" },
+    { "ruleId": "RPA008", "workflowPath": "Business/NoLoggingWorkflow.xaml", "minimumCount": 1, "severity": "Suggestion" },
+    { "ruleId": "RPA009", "workflowPath": "Business/Login.xaml", "minimumCount": 1, "severity": "Critical", "expectedCurrentValue": "[REDACTED]" },
+    { "ruleId": "RPA010", "workflowPath": "Business/Login.xaml", "minimumCount": 1, "severity": "Error", "expectedCurrentValue": "[REDACTED]" },
+    { "ruleId": "RPA011", "workflowPath": "Business/Login.xaml", "minimumCount": 1, "severity": "Warning" },
+    { "ruleId": "RPA012", "workflowPath": "Business/Login.xaml", "minimumCount": 1, "severity": "Warning" },
+    { "ruleId": "RPA013", "workflowPath": "Business/Login.xaml", "minimumCount": 3, "severity": "Warning" },
+    { "ruleId": "RPA014", "workflowPath": "Business/Login.xaml", "minimumCount": 1, "severity": "Error" },
+    { "ruleId": "RPA015", "workflowPath": "Business/SelectorIssues.xaml", "minimumCount": 1, "severity": "Suggestion" },
+    { "ruleId": "RPA016", "workflowPath": "Business/SelectorIssues.xaml", "minimumCount": 1, "severity": "Suggestion" },
+    { "ruleId": "RPA017", "workflowPath": "Business/Login.xaml", "minimumCount": 1, "severity": "Warning" },
+    { "ruleId": "RPA018", "workflowPath": "Business/SelectorIssues.xaml", "minimumCount": 1, "severity": "Warning" },
+    { "ruleId": "RPA019", "workflowPath": "Business/SelectorIssues.xaml", "minimumCount": 1, "severity": "Suggestion" },
+    { "ruleId": "RPA020", "workflowPath": "Business/Login.xaml", "minimumCount": 1, "severity": "Warning" },
+    { "ruleId": "RPA021", "workflowPath": "Business/SendMail.xaml", "minimumCount": 1, "severity": "Suggestion" },
+    { "ruleId": "RPA022", "workflowPath": "Business/CallExternalApi.xaml", "minimumCount": 1, "severity": "Warning" },
+    { "ruleId": "RPA023", "workflowPath": "Business/CallExternalApi.xaml", "minimumCount": 1, "severity": "Warning" },
+    { "ruleId": "RPA024", "workflowPath": "Business/ArgumentsHeavy.xaml", "minimumCount": 1, "severity": "Suggestion" },
+    { "ruleId": "RPA025", "workflowPath": "Business/LargeWorkflow.xaml", "minimumCount": 1, "severity": "Warning" }
+  ],
+  "expectedNoFindings": [
+    { "ruleId": "RPA009", "workflowPath": "Framework/InitAllSettings.xaml", "reason": "Credential name is read from Config." },
+    { "ruleId": "RPA010", "workflowPath": "Framework/InitAllSettings.xaml", "reason": "Safe credential status log does not include the secret value." },
+    { "ruleId": "RPA011", "workflowPath": "Framework/InitAllSettings.xaml", "reason": "UI timeout is configured." },
+    { "ruleId": "RPA017", "workflowPath": "Framework/InitAllSettings.xaml", "reason": "Stable selector has no idx." },
+    { "ruleId": "RPA018", "workflowPath": "Framework/InitAllSettings.xaml", "reason": "Stable selector has no generated id." },
+    { "ruleId": "RPA020", "workflowPath": "Framework/InitAllSettings.xaml", "reason": "File path is configured." },
+    { "ruleId": "RPA023", "workflowPath": "Business/GetCustomerData.xaml", "reason": "HTTP Request is inside TryCatch." }
+  ],
+  "allowedAdditionalFindings": [
+    { "ruleId": "RPA008", "workflowPath": "Business/LargeWorkflow.xaml", "reason": "Large workflow intentionally has no logging to keep RPA025 isolated but RPA008 is also legitimate." },
+    { "ruleId": "RPA008", "workflowPath": "Business/SelectorIssues.xaml", "reason": "Selector-focused workflow is non-trivial and intentionally has no log messages." }
+  ]
+}

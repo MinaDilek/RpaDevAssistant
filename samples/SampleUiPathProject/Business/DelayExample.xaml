@@ -1,0 +1,12 @@
+<Activity
+  xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:ui="http://schemas.uipath.com/workflow/activities"
+  x:Class="DelayExample">
+  <Sequence DisplayName="Delay Example">
+    <Sequence.Activities>
+      <Delay DisplayName="Delay" Duration="00:00:05" />
+      <ui:Click DisplayName="Click Continue Button" />
+    </Sequence.Activities>
+  </Sequence>
+</Activity>

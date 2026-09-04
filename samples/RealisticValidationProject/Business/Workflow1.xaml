@@ -1,0 +1,10 @@
+<Activity
+  xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  x:Class="Business.Workflow1">
+  <Sequence DisplayName="Workflow1">
+    <Sequence.Activities>
+      <Assign DisplayName="Prepare value" />
+    </Sequence.Activities>
+  </Sequence>
+</Activity>

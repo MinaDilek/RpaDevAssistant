@@ -1,0 +1,13 @@
+<Activity
+  xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:ui="http://schemas.uipath.com/workflow/activities"
+  x:Class="Framework.GetTransactionData">
+  <Sequence DisplayName="Get Transaction Data">
+    <Sequence.Activities>
+      <ui:LogMessage DisplayName="Log get transaction start" Message="Getting next transaction item" />
+      <ui:InvokeWorkflowFile DisplayName="Get customer data" WorkflowFileName="Business\GetCustomerData.xaml" />
+      <ui:InvokeWorkflowFile DisplayName="Send notification" WorkflowFileName="Business\SendMail.xaml" />
+    </Sequence.Activities>
+  </Sequence>
+</Activity>

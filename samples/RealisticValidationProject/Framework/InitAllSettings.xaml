@@ -1,0 +1,14 @@
+<Activity
+  xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:ui="http://schemas.uipath.com/workflow/activities"
+  x:Class="Framework.InitAllSettings">
+  <Sequence DisplayName="Init All Settings">
+    <Sequence.Activities>
+      <ui:GetCredential DisplayName="Get Orchestrator Credential" CredentialName="Config(&quot;CredentialAsset&quot;)" />
+      <ui:LogMessage DisplayName="Log credential loaded" Message="Credential loaded successfully" />
+      <ui:Click DisplayName="Click Login Button" Selector="&lt;webctrl tag='BUTTON' aaname='Login' /&gt;" TimeoutMS="Config(&quot;UiTimeout&quot;)" />
+      <Assign DisplayName="Read output path" FilePath="Config(&quot;OutputPath&quot;)" />
+    </Sequence.Activities>
+  </Sequence>
+</Activity>

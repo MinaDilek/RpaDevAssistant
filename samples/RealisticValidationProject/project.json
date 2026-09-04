@@ -1,0 +1,12 @@
+{
+  "name": "RealisticValidationProject",
+  "description": "Realistic local validation fixture for RPA Dev Assistant.",
+  "main": "Main.xaml",
+  "compatibility": "Windows",
+  "dependencies": {
+    "UiPath.System.Activities": "25.4.2",
+    "UiPath.UIAutomation.Activities": "25.4.3",
+    "UiPath.WebAPI.Activities": "1.21.1",
+    "UiPath.Mail.Activities": "1.24.1"
+  }
+}

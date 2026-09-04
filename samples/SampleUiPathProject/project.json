@@ -1,0 +1,9 @@
+{
+  "name": "SampleUiPathProject",
+  "targetFramework": "Windows",
+  "description": "Minimal sample project for RPA Dev Assistant scanner tests.",
+  "dependencies": {
+    "UiPath.System.Activities": "[23.10.1]",
+    "UiPath.Excel.Activities": "[2.23.0]"
+  }
+}

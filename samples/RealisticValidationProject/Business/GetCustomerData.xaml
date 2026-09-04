@@ -1,0 +1,33 @@
+<Activity
+  xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:ui="http://schemas.uipath.com/workflow/activities"
+  x:Class="Business.GetCustomerData">
+  <Sequence DisplayName="Get Customer Data">
+    <Sequence.Activities>
+      <ui:LogMessage DisplayName="Log customer lookup start" Message="Starting customer lookup" />
+      <TryCatch DisplayName="Call customer service">
+        <TryCatch.Try>
+          <Sequence DisplayName="Try customer lookup">
+            <Sequence.Activities>
+              <ui:HttpRequest DisplayName="Get Customer API" Timeout="30000" />
+            </Sequence.Activities>
+          </Sequence>
+        </TryCatch.Try>
+        <TryCatch.Catches>
+          <Catch x:TypeArguments="x:Object">
+            <ActivityAction x:TypeArguments="x:Object">
+              <Sequence DisplayName="Handle customer lookup exception">
+                <Sequence.Activities>
+                  <ui:LogMessage DisplayName="Log customer lookup exception" Message="Customer lookup failed" />
+                  <Rethrow DisplayName="Rethrow customer lookup exception" />
+                </Sequence.Activities>
+              </Sequence>
+            </ActivityAction>
+          </Catch>
+        </TryCatch.Catches>
+      </TryCatch>
+      <Assign DisplayName="Set customer result" CustomerId="in_CustomerId" />
+    </Sequence.Activities>
+  </Sequence>
+</Activity>

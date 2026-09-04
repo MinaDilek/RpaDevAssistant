@@ -1,0 +1,13 @@
+<Activity
+  xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:ui="http://schemas.uipath.com/workflow/activities"
+  x:Class="Framework.Process">
+  <Sequence DisplayName="Process Transaction">
+    <Sequence.Activities>
+      <ui:InvokeWorkflowFile DisplayName="Login" WorkflowFileName="Business\Login.xaml" />
+      <ui:InvokeWorkflowFile DisplayName="Call external API" WorkflowFileName="Business\CallExternalApi.xaml" />
+      <ui:InvokeWorkflowFile DisplayName="Set status" WorkflowFileName="Framework\SetTransactionStatus.xaml" />
+    </Sequence.Activities>
+  </Sequence>
+</Activity>
