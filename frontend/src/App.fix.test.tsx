@@ -114,7 +114,7 @@ describe('App Fix Suggestion UI', () => {
 
   it('shows loading state', async () => {
     getFixSuggestion.mockImplementation(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 20));
+      await new Promise((resolve) => window.setTimeout(resolve, 200));
       return fixResponse();
     });
     render(<App />);

@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { Bell, Bot, ChevronDown, Download, FileJson, FolderOpen, GitBranch, History, Package, Play, RefreshCw, RotateCcw, Send, Settings, Wrench } from 'lucide-react';
+import { AlertTriangle, BarChart3, Bell, Bot, CheckCircle2, ChevronDown, Clock, Code, Copy, Download, Edit, FileJson, FileText, Filter, FolderOpen, GitBranch, History, Info, Layers, Package, Play, Plus, Power, RefreshCw, RotateCcw, Search, Send, Settings, Shield, Sliders, Sparkles, ToggleLeft, ToggleRight, Upload, Wrench, X } from 'lucide-react';
 import { analyzeFlowchartConversion, analyzeProject, analyzeStandaloneFlowchart, applyFix, applyFlowchartConversion, askProject, checkHealth, compareAnalysisSnapshots, convertStandaloneFlowchart, exportCustomRules, exportRuleProfiles, getBackendBaseUrl, getFixSuggestion, getRuleProfiles, getRules, importCustomRules, listAnalysisHistory, listBackups, rollbackFlowchartConversion, runAiReview, saveCustomRule, saveRuleProfile, setApiLocale, testCustomRule, undoFix, validateProject } from './services/apiClient';
 import { isTauriDesktop, selectConvertedWorkflowSavePath, selectProjectFolder, selectXamlWorkflowFiles } from './services/projectFolderService';
 import { exportReport, type ReportFormat } from './services/reportExportService';
@@ -423,58 +423,97 @@ export function App() {
     }
   }
 
-  const navigationItems: Array<{ label: string; tab?: ActiveTab }> = [
-    { label: t('home'), tab: 'overview' },
-    { label: t('projects'), tab: 'overview' },
-    { label: t('codeReview'), tab: 'workflows' },
-    { label: t('findingsNav'), tab: 'findings' },
-    { label: t('rules'), tab: 'rules' },
-    { label: t('flowchartConverter'), tab: 'flowchartConverter' },
-    { label: t('aiReview'), tab: 'ai' },
-    { label: t('reports'), tab: 'report' },
-    { label: t('reviewHistory'), tab: 'history' },
+  const navigationItems: Array<{ label: string; tab: ActiveTab; icon: React.ComponentType<{ size?: number }> }> = [
+    { label: t('projects'), tab: 'overview', icon: FolderOpen },
+    { label: t('workflows'), tab: 'workflows', icon: GitBranch },
+    { label: t('findingsNav'), tab: 'findings', icon: AlertTriangle },
+    { label: t('dependencies'), tab: 'dependencies', icon: Package },
+    { label: t('flowchartConverter'), tab: 'flowchartConverter', icon: Code },
+    { label: t('aiFixes'), tab: 'ai', icon: Sparkles },
+    { label: t('reviewHistory'), tab: 'history', icon: History },
+    { label: t('rules'), tab: 'rules', icon: Sliders },
+    { label: t('reports'), tab: 'report', icon: FileText },
+    { label: t('settings'), tab: 'settings', icon: Settings },
   ];
 
   return (
-    <main className="app-shell">
+    <main className="app-shell h-screen overflow-hidden flex bg-slate-50 text-slate-800 antialiased">
       <aside className="sidebar" aria-label={t('primaryNavigation')}>
         <div className="brand-lockup">
-          <span className="brand-mark">R</span>
+          <span className="brand-mark"><Shield size={18} /></span>
           <strong>RPA Dev Assistant</strong>
         </div>
         <nav className="sidebar-nav">
-          {navigationItems.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              aria-label={`Sidebar ${item.label}`}
-              className={item.tab === activeTab ? 'active' : ''}
-              onClick={() => item.tab && setActiveTab(item.tab)}
-            >
-              {item.label}
-            </button>
-          ))}
+          {navigationItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = item.tab === activeTab;
+            return (
+              <button
+                key={item.label}
+                type="button"
+                aria-label={`Sidebar ${item.label}`}
+                className={isActive ? 'active' : ''}
+                onClick={() => setActiveTab(item.tab)}
+              >
+                <Icon size={16} />
+                <span>{item.label}</span>
+                {item.tab === 'rules' && <span className="nav-badge-active">{t('active') || 'Aktif'}</span>}
+              </button>
+            );
+          })}
         </nav>
         <div className="sidebar-footer">
-          <button type="button" onClick={() => setActiveTab('settings')}>{t('settings')}</button>
-          <button type="button">{t('help')}</button>
-          <div className="mini-profile">
+          <div className="mini-profile-card">
             <span className="avatar">MD</span>
-            <span>Mina Dilek</span>
+            <div className="mini-profile-info">
+              <strong className="user-name">Mina Dilek</strong>
+              <span className="team-info">{analysis?.projectName ? `${analysis.projectName} / Core Team` : 'RPA Dev Team'}</span>
+            </div>
           </div>
         </div>
       </aside>
 
-      <section className="main-area">
+      <section className="main-area flex-1 flex flex-col h-screen overflow-hidden">
         <header className="top-bar">
-          <div>
-            <h1>{analysis ? analysis.projectName ?? t('projectOverview') : t('dashboard')}</h1>
-            <p>{analysis ? t('projectWorkspace') : t('homeSubtitle')}</p>
+          <div className="top-breadcrumb">
+            <div className="topbar-chip project-chip">
+              <FolderOpen size={14} />
+              <span>{analysis?.projectName ?? 'InvoiceAutomation'}</span>
+            </div>
+            <div className="topbar-chip branch-chip">
+              <GitBranch size={14} />
+              <span>main</span>
+            </div>
+            <div className="topbar-chip time-chip">
+              <Clock size={14} />
+              <span>{t('lastAnalysisTime')}: <strong>{analysisSnapshots[0]?.generatedAtUtc ? formatTimestamp(analysisSnapshots[0].generatedAtUtc) : '14:32:05'}</strong></span>
+            </div>
           </div>
           <div className="top-actions">
-            <input aria-label="Global search" placeholder={t('globalSearch')} />
+            <div className="search-wrap">
+              <Search size={15} className="search-icon" />
+              <input aria-label="Global search" placeholder={t('globalSearch')} />
+            </div>
             <button className="language-switch" type="button" onClick={() => setLanguage(language === 'tr' ? 'en' : 'tr')}>
               {language.toUpperCase()} / {language === 'tr' ? 'EN' : 'TR'}
+            </button>
+            <button
+              className="btn-ai-action"
+              type="button"
+              onClick={() => void runAiReviewFromUi('Project')}
+              disabled={!analysis || aiReviewLoading}
+            >
+              <Sparkles size={16} />
+              <span>{t('aiFixes')}</span>
+            </button>
+            <button
+              className="btn-static-analysis"
+              type="button"
+              onClick={runAnalysis}
+              disabled={isAnalyzing || healthState !== 'ready'}
+            >
+              <Play size={16} fill="currentColor" />
+              <span>{isAnalyzing ? t('analyzing') : t('runStaticAnalysis')}</span>
             </button>
             <button className="icon-button" type="button" aria-label="Notifications">
               <Bell size={18} />
@@ -588,6 +627,7 @@ export function App() {
                 void refreshProfiles();
               }}
               onStatus={setRuleStatus}
+              findings={findings}
             />
           ) : analysis ? (
             <>
@@ -1234,6 +1274,101 @@ function DashboardEmpty({ t, onAnalyze, onOpenProject }: { t: (key: string, valu
   );
 }
 
+function CategoryIcon({ category }: { category: string }) {
+  switch (category?.toLowerCase()) {
+    case 'security':
+      return <Shield size={14} className="category-icon text-rose-500 inline mr-1" />;
+    case 'reliability':
+    case 'exceptionhandling':
+    case 'error handling':
+      return <AlertTriangle size={14} className="category-icon text-amber-500 inline mr-1" />;
+    case 'maintainability':
+    case 'naming':
+      return <Code size={14} className="category-icon text-indigo-500 inline mr-1" />;
+    case 'performance':
+      return <BarChart3 size={14} className="category-icon text-emerald-500 inline mr-1" />;
+    default:
+      return <Layers size={14} className="category-icon text-sky-500 inline mr-1" />;
+  }
+}
+
+function SeverityBadge({ severity }: { severity: string }) {
+  const sev = severity?.toLowerCase();
+  let badgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
+  if (sev === 'critical' || sev === 'error') {
+    badgeClass = 'bg-rose-50 text-rose-700 border-rose-200 font-semibold';
+  } else if (sev === 'warning') {
+    badgeClass = 'bg-amber-50 text-amber-700 border-amber-200 font-semibold';
+  } else if (sev === 'info' || sev === 'suggestion') {
+    badgeClass = 'bg-sky-50 text-sky-700 border-sky-200 font-semibold';
+  }
+  return <span className={`severity-badge border px-2 py-0.5 rounded-full text-xs ${badgeClass}`}>{severity}</span>;
+}
+
+function RuleCategoryChart({ rules, t }: { rules: RuleCatalogItem[]; t: (key: string, values?: Record<string, unknown>) => string }) {
+  const categoryStats = React.useMemo(() => {
+    const map = new Map<string, { critical: number; warning: number; info: number }>();
+    for (const rule of rules) {
+      const cat = rule.category || 'General';
+      if (!map.has(cat)) {
+        map.set(cat, { critical: 0, warning: 0, info: 0 });
+      }
+      const entry = map.get(cat)!;
+      const sev = (rule.defaultSeverity || '').toLowerCase();
+      if (sev === 'critical' || sev === 'error') {
+        entry.critical += 1;
+      } else if (sev === 'warning') {
+        entry.warning += 1;
+      } else {
+        entry.info += 1;
+      }
+    }
+    return Array.from(map.entries()).map(([category, counts]) => ({
+      category,
+      ...counts,
+      total: counts.critical + counts.warning + counts.info,
+    }));
+  }, [rules]);
+
+  const maxTotal = Math.max(...categoryStats.map((s) => s.total), 1);
+
+  return (
+    <div className="chart-container max-h-[250px] p-4 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+          <BarChart3 size={16} className="text-indigo-600" />
+          <span>{t('ruleCategoryDistribution')}</span>
+        </h3>
+        <div className="flex items-center gap-4 text-xs font-medium text-slate-600">
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" /> Critical / Error</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> Warning</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-sky-500 inline-block" /> Info / Suggestion</span>
+        </div>
+      </div>
+      <div className="chart-bars flex items-end gap-3 h-[140px] pt-2 pb-1 overflow-x-auto">
+        {categoryStats.map((stat) => {
+          const critPct = (stat.critical / maxTotal) * 100;
+          const warnPct = (stat.warning / maxTotal) * 100;
+          const infoPct = (stat.info / maxTotal) * 100;
+          return (
+            <div key={stat.category} className="chart-bar-col flex-1 min-w-[55px] flex flex-col items-center h-full justify-end group">
+              <div className="text-[10px] font-bold text-slate-500 mb-1">{stat.total}</div>
+              <div className="w-full max-w-[38px] bg-slate-100 rounded-t-md overflow-hidden flex flex-col justify-end" style={{ height: '100px' }}>
+                {stat.critical > 0 && <div className="bg-rose-500 transition-all" style={{ height: `${critPct}%` }} title={`Critical: ${stat.critical}`} />}
+                {stat.warning > 0 && <div className="bg-amber-500 transition-all" style={{ height: `${warnPct}%` }} title={`Warning: ${stat.warning}`} />}
+                {stat.info > 0 && <div className="bg-sky-500 transition-all" style={{ height: `${infoPct}%` }} title={`Info: ${stat.info}`} />}
+              </div>
+              <span className="text-[11px] font-semibold text-slate-600 truncate max-w-[65px] mt-2" title={stat.category}>
+                {stat.category}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function RulesView({
   rules,
   isLoading,
@@ -1245,6 +1380,7 @@ function RulesView({
   onSelectRule,
   onRefresh,
   onStatus,
+  findings = [],
 }: {
   rules: RuleCatalogItem[];
   isLoading: boolean;
@@ -1256,35 +1392,87 @@ function RulesView({
   onSelectRule: (rule: RuleCatalogItem) => void;
   onRefresh: () => void;
   onStatus: (message: string) => void;
+  findings?: Finding[];
 }) {
   const [query, setQuery] = React.useState('');
   const [category, setCategory] = React.useState('All');
   const [severity, setSeverity] = React.useState('All');
   const [scope, setScope] = React.useState('All');
   const [source, setSource] = React.useState('All');
-  const [enabled, setEnabled] = React.useState('All');
+  const [enabledFilter, setEnabledFilter] = React.useState('All');
+  const [enabledRulesMap, setEnabledRulesMap] = React.useState<Record<string, boolean>>({});
   const [draft, setDraft] = React.useState<CustomRuleDefinition>(() => createDefaultCustomRule());
   const [profileDraft, setProfileDraft] = React.useState<RuleProfile>(() => createDefaultRuleProfile(rules));
   const [testResult, setTestResult] = React.useState<CustomRuleTestResult | null>(null);
   const [isTesting, setIsTesting] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
-  const categories = unique(['All', ...rules.map((rule) => rule.category)]);
+  const customRuleSectionRef = React.useRef<HTMLDivElement | null>(null);
+
+  const totalRules = rules.length;
+  const activeRules = rules.filter((r) => enabledRulesMap[r.id] !== undefined ? enabledRulesMap[r.id] : r.enabledByDefault !== false).length;
+  const disabledRules = totalRules - activeRules;
+  const customRules = rules.filter((r) => r.isCustom).length;
+
+  const categoryPills = React.useMemo(() => {
+    const list = ['All', 'Security', 'Selector', 'Error Handling', 'Reliability', 'Maintainability', 'Naming', 'Architecture'];
+    const catalogCats = Array.from(new Set(rules.map((r) => r.category).filter(Boolean)));
+    return Array.from(new Set([...list, ...catalogCats]));
+  }, [rules]);
+
+  const findingsCountMap = React.useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const f of findings) {
+      if (f.ruleId) {
+        map[f.ruleId] = (map[f.ruleId] || 0) + 1;
+      }
+    }
+    return map;
+  }, [findings]);
+
   const severities = unique(['All', ...rules.map((rule) => rule.defaultSeverity)]);
   const scopes = unique(['All', ...rules.map((rule) => rule.scope)]);
+
   const filtered = rules.filter((rule) => {
     const q = query.trim().toLowerCase();
-    return (!q || rule.id.toLowerCase().includes(q) || rule.name.toLowerCase().includes(q))
-      && (category === 'All' || rule.category === category)
+    const isRuleEnabled = enabledRulesMap[rule.id] !== undefined ? enabledRulesMap[rule.id] : rule.enabledByDefault !== false;
+    return (!q || rule.id.toLowerCase().includes(q) || rule.name.toLowerCase().includes(q) || rule.category.toLowerCase().includes(q))
+      && (category === 'All' || rule.category.toLowerCase().includes(category.toLowerCase()) || category.toLowerCase().includes(rule.category.toLowerCase()))
       && (severity === 'All' || rule.defaultSeverity === severity)
       && (scope === 'All' || rule.scope === scope)
       && (source === 'All' || (source === 'BuiltIn' ? rule.isBuiltIn : rule.isCustom))
-      && (enabled === 'All' || String(Boolean(rule.enabledByDefault)) === enabled);
+      && (enabledFilter === 'All' || String(isRuleEnabled) === enabledFilter);
   });
 
   React.useEffect(() => {
     setProfileDraft((current) => current.rules.length === 0 ? createDefaultRuleProfile(rules) : current);
   }, [rules]);
+
+  function toggleRuleActive(ruleId: string) {
+    setEnabledRulesMap((prev) => {
+      const current = prev[ruleId] !== undefined ? prev[ruleId] : (rules.find((r) => r.id === ruleId)?.enabledByDefault !== false);
+      return { ...prev, [ruleId]: !current };
+    });
+  }
+
+  function handleAddQuickCondition(type: 'workflow' | 'activity' | 'property' | 'regex') {
+    let newCondition = { field: 'Activity.Name', operator: 'Equals', value: '', caseSensitive: false, propertyName: '', compareValue: '' };
+    if (type === 'workflow') {
+      newCondition = { field: 'Workflow.ExecutableActivityCount', operator: 'GreaterThanOrEqual', value: '50', caseSensitive: false, propertyName: '', compareValue: '' };
+    } else if (type === 'activity') {
+      newCondition = { field: 'Activity.Name', operator: 'Equals', value: 'Delay', caseSensitive: false, propertyName: '', compareValue: '' };
+    } else if (type === 'property') {
+      newCondition = { field: 'Activity.Property', operator: 'Equals', value: '', caseSensitive: false, propertyName: 'Target.Selector', compareValue: '' };
+    } else if (type === 'regex') {
+      newCondition = { field: 'Activity.Property', operator: 'Contains', value: '.*idx=.*', caseSensitive: false, propertyName: 'Target.Selector', compareValue: '' };
+    }
+    setDraft((rule) => ({ ...rule, conditions: [...rule.conditions, newCondition] }));
+    customRuleSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  function scrollToCustomRuleBuilder() {
+    customRuleSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }
 
   async function runTestRule() {
     if (!projectPath) {
@@ -1360,15 +1548,78 @@ function RulesView({
 
   return (
     <section className="results-panel rules-panel" aria-label={t('rules')}>
-      <div className="section-heading">
-        <div>
-          <span className="eyebrow">{t('ruleCatalog')}</span>
-          <h2>{t('rules')}</h2>
+      {/* KPI Cards (4 summary cards) */}
+      <div className="kpi-grid">
+        <div className="kpi-card">
+          <div className="kpi-icon-wrap bg-indigo-50 text-indigo-600"><Sliders size={20} /></div>
+          <div>
+            <span className="kpi-label">{t('totalRules')}</span>
+            <strong className="kpi-val text-indigo-700">{totalRules}</strong>
+          </div>
         </div>
-        <div className="action-row compact-actions">
-          <button type="button" onClick={onRefresh}>{t('refresh')}</button>
-          <button type="button" onClick={() => void downloadRules()}>{t('exportRules')}</button>
-          <button type="button" onClick={() => void importRulesFromPrompt()}>{t('importRules')}</button>
+        <div className="kpi-card">
+          <div className="kpi-icon-wrap bg-emerald-50 text-emerald-600"><CheckCircle2 size={20} /></div>
+          <div>
+            <span className="kpi-label">{t('activeRules')}</span>
+            <strong className="kpi-val text-emerald-700">{activeRules}</strong>
+          </div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-icon-wrap bg-amber-50 text-amber-600"><Power size={20} /></div>
+          <div>
+            <span className="kpi-label">{t('disabledRules')}</span>
+            <strong className="kpi-val text-amber-700">{disabledRules}</strong>
+          </div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-icon-wrap bg-sky-50 text-sky-600"><Code size={20} /></div>
+          <div>
+            <span className="kpi-label">{t('customRules')}</span>
+            <strong className="kpi-val text-sky-700">{customRules}</strong>
+          </div>
+        </div>
+      </div>
+
+      {/* Analytical Stacked Chart Area */}
+      <RuleCategoryChart rules={rules} t={t} />
+
+      {/* Search and Filter Bar */}
+      <div className="search-filter-bar">
+        <div className="search-pills-row">
+          <div className="search-wrap min-w-[200px]">
+            <Search size={15} className="search-icon" />
+            <input
+              aria-label={t('searchRules')}
+              placeholder={t('searchRules')}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </div>
+          <div className="pills-list">
+            {categoryPills.map((pill) => {
+              const active = (pill === 'All' && category === 'All') || (category.toLowerCase() === pill.toLowerCase());
+              return (
+                <button
+                  key={pill}
+                  type="button"
+                  onClick={() => setCategory(pill === 'All' ? 'All' : pill)}
+                  className={`pill-btn ${active ? 'active' : ''}`}
+                >
+                  {pill === 'All' ? 'Tümü' : pill}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="action-btns-row">
+          <button type="button" onClick={() => void downloadRules()} className="btn-secondary">
+            <Download size={14} />
+            <span>{t('exportRules')}</span>
+          </button>
+          <button type="button" onClick={() => void importRulesFromPrompt()} className="btn-secondary">
+            <Upload size={14} />
+            <span>{t('importRules')}</span>
+          </button>
           <input
             ref={fileInputRef}
             type="file"
@@ -1382,58 +1633,193 @@ function RulesView({
               }
             }}
           />
+          <button
+            type="button"
+            onClick={scrollToCustomRuleBuilder}
+            className="btn-highlight"
+          >
+            <Plus size={15} />
+            <span>{t('newCustomRule')}</span>
+          </button>
         </div>
       </div>
-      {status && <p className="hint">{status}</p>}
-      <div className="filter-row">
-        <input aria-label={t('searchRules')} placeholder={t('searchRules')} value={query} onChange={(event) => setQuery(event.target.value)} />
-        <select aria-label={t('category')} value={category} onChange={(event) => setCategory(event.target.value)}>{categories.map((item) => <option key={item}>{item}</option>)}</select>
-        <select aria-label={t('severity')} value={severity} onChange={(event) => setSeverity(event.target.value)}>{severities.map((item) => <option key={item}>{item}</option>)}</select>
-        <select aria-label={t('scope')} value={scope} onChange={(event) => setScope(event.target.value)}>{scopes.map((item) => <option key={item}>{item}</option>)}</select>
-        <select aria-label={t('source')} value={source} onChange={(event) => setSource(event.target.value)}><option>All</option><option>BuiltIn</option><option>Custom</option></select>
-        <select aria-label={t('enabled')} value={enabled} onChange={(event) => setEnabled(event.target.value)}><option value="All">All</option><option value="true">{t('enabled')}</option><option value="false">{t('disabled')}</option></select>
-      </div>
-      <div className="split-layout">
-        <div>
-          {isLoading ? <p className="empty-state">{t('loadingRules')}</p> : (
-            <table className="compact-table">
-              <thead><tr><th>{t('ruleId')}</th><th>{t('name')}</th><th>{t('category')}</th><th>{t('severity')}</th><th>{t('scope')}</th><th>{t('enabled')}</th><th>{t('source')}</th><th>{t('fixSupport')}</th></tr></thead>
-              <tbody>
-                {filtered.map((rule) => (
-                  <tr key={rule.id} onClick={() => onSelectRule(rule)} className={selectedRule?.id === rule.id ? 'selected-row' : ''}>
-                    <td><button type="button" className="link-button" onClick={() => onSelectRule(rule)}>{rule.id}</button></td>
-                    <td>{rule.name}</td><td>{rule.category}</td><td>{rule.defaultSeverity}</td><td>{rule.scope}</td>
-                    <td>{rule.enabledByDefault ? t('yes') : t('no')}</td>
-                    <td>{rule.isBuiltIn ? t('builtIn') : t('custom')}</td>
-                    <td>{rule.hasFixSuggestion ? t('yes') : t('no')}</td>
+
+      {status && <p className="notice info-notice">{status}</p>}
+
+      {/* Two-Column Split Inspector View */}
+      <div className="split-inspector-view">
+        {/* Left Column Table */}
+        <div className="table-card">
+          <div className="table-card-header">
+            <h3 className="card-title">
+              <Sliders size={14} className="text-indigo-600" />
+              <span>Kural Kataloğu ({filtered.length})</span>
+            </h3>
+            <div className="table-header-controls">
+              <select
+                aria-label={t('severity')}
+                value={severity}
+                onChange={(e) => setSeverity(e.target.value)}
+              >
+                {severities.map((item) => <option key={item}>{item}</option>)}
+              </select>
+            </div>
+          </div>
+          {isLoading ? (
+            <p className="empty-state p-6">{t('loadingRules')}</p>
+          ) : (
+            <div className="table-scroll-wrap">
+              <table className="inspector-table">
+                <thead>
+                  <tr>
+                    <th>Kural ID</th>
+                    <th>Kural Adı</th>
+                    <th>Kategori</th>
+                    <th>Önem</th>
+                    <th>Durum</th>
+                    <th className="text-center">Bulgular</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filtered.map((rule) => {
+                    const isSelected = selectedRule?.id === rule.id;
+                    const isEnabled = enabledRulesMap[rule.id] !== undefined ? enabledRulesMap[rule.id] : rule.enabledByDefault !== false;
+                    const findingCount = findingsCountMap[rule.id] || 0;
+                    return (
+                      <tr
+                        key={rule.id}
+                        onClick={() => onSelectRule(rule)}
+                        className={isSelected ? 'selected-row' : ''}
+                      >
+                        <td className="font-mono font-bold text-indigo-700">{rule.id}</td>
+                        <td className="font-medium text-slate-800">{rule.name}</td>
+                        <td className="text-slate-600">
+                          <CategoryIcon category={rule.category} />
+                          <span>{rule.category}</span>
+                        </td>
+                        <td><SeverityBadge severity={rule.defaultSeverity} /></td>
+                        <td>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleRuleActive(rule.id);
+                            }}
+                            className={`status-toggle-btn ${isEnabled ? 'enabled' : 'disabled'}`}
+                          >
+                            {isEnabled ? 'Aktif' : 'Pasif'}
+                          </button>
+                        </td>
+                        <td className="text-center font-bold">
+                          <span className={`findings-pill ${findingCount > 0 ? 'has-findings' : 'zero-findings'}`}>
+                            {findingCount}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
-        <aside className="detail-panel">
+
+        {/* Right Column Rule Detail Card */}
+        <div className="detail-card">
           {selectedRule ? (
             <>
-              <span className="eyebrow">{selectedRule.isBuiltIn ? t('builtInRule') : t('customRule')}</span>
-              <h3>{selectedRule.id} {selectedRule.name}</h3>
-              <p>{selectedRule.description}</p>
-              {selectedRule.recommendation && <p className="hint">{selectedRule.recommendation}</p>}
-              <div className="metric-grid compact">
-                <Metric label={t('category')} value={selectedRule.category} />
-                <Metric label={t('severity')} value={selectedRule.defaultSeverity} />
-                <Metric label={t('scope')} value={selectedRule.scope} />
-                <Metric label={t('weight')} value={selectedRule.defaultWeight ?? 0} />
-                <Metric label={t('maxPenalty')} value={selectedRule.defaultMaxPenalty ?? 0} />
-                <Metric label={t('aggregationSupport')} value={selectedRule.supportsAggregation ? t('yes') : t('no')} />
-                <Metric label={t('fixSupport')} value={selectedRule.hasFixSuggestion ? t('yes') : t('no')} />
-                <Metric label={t('autoApply')} value={selectedRule.canAutoApply ? t('yes') : t('no')} />
+              <div className="detail-card-header">
+                <div>
+                  <span className="source-tag">
+                    {selectedRule.isBuiltIn ? t('builtInRule') : t('customRule')}
+                  </span>
+                  <strong className="font-mono ml-2 text-slate-800">{selectedRule.id}</strong>
+                </div>
+                <SeverityBadge severity={selectedRule.defaultSeverity} />
               </div>
-              <pre className="preview-block">{selectedRule.defaultSeverity} · {selectedRule.category} · {selectedRule.scope}</pre>
+
+              <h3 className="rule-detail-title">{selectedRule.name}</h3>
+
+              <div className="rule-detail-sections">
+                <div className="detail-section">
+                  <h4 className="detail-section-label">Açıklama</h4>
+                  <p className="detail-section-text">{selectedRule.description}</p>
+                </div>
+
+                <div className="detail-section">
+                  <h4 className="detail-section-label text-indigo-700">{t('rationale')}</h4>
+                  <p className="detail-section-text rationale-box">
+                    {selectedRule.recommendation || 'This rule ensures automation reliability, maintainability, and enterprise execution stability.'}
+                  </p>
+                </div>
+
+                <div className="detail-section">
+                  <h4 className="detail-section-label">{t('detectionLogic')}</h4>
+                  <div className="detection-grid">
+                    <div><strong>Kapsam:</strong> {selectedRule.scope}</div>
+                    <div><strong>Kategori:</strong> {selectedRule.category}</div>
+                    <div><strong>Ağırlık:</strong> {selectedRule.defaultWeight ?? 1}</div>
+                    <div><strong>Maks Ceza:</strong> {selectedRule.defaultMaxPenalty ?? 10}</div>
+                  </div>
+                </div>
+
+                <div className="detail-section">
+                  <h4 className="detail-section-label">{t('suggestedFix')}</h4>
+                  <p className="detail-section-text fix-box">
+                    {selectedRule.recommendation || 'Gerekli activity özelliklerini yapılandırın ve isimlendirme standartlarına uyun.'}
+                  </p>
+                </div>
+
+                {/* Dark-themed monospaced XML/XAML code block preview */}
+                <div className="detail-section">
+                  <h4 className="detail-section-label mb-1">XAML / XML Pattern Öne Çıkarımı</h4>
+                  <pre className="preview-block">
+{`<!-- Inspection Rule: ${selectedRule.id} -->
+<ui:Activity Target="${selectedRule.scope}">
+  <ui:Activity.Property Name="DisplayName" Value="${selectedRule.name}" />
+  <!-- Severity: ${selectedRule.defaultSeverity} | Category: ${selectedRule.category} -->
+</ui:Activity>`}
+                  </pre>
+                </div>
+              </div>
+
+              {/* Bottom Actions */}
+              <div className="card-actions-row">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraft((d) => ({ ...d, name: selectedRule.name, category: selectedRule.category }));
+                    scrollToCustomRuleBuilder();
+                  }}
+                  className="btn-secondary"
+                >
+                  <Edit size={13} />
+                  <span>{t('editRule')}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleRuleActive(selectedRule.id)}
+                  className="btn-secondary"
+                >
+                  <Power size={13} />
+                  <span>{(enabledRulesMap[selectedRule.id] !== undefined ? enabledRulesMap[selectedRule.id] : selectedRule.enabledByDefault !== false) ? t('disableRule') : t('enableRule')}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCategory(selectedRule.category)}
+                  className="btn-similar"
+                >
+                  <Filter size={13} />
+                  <span>{t('findSimilar')}</span>
+                </button>
+              </div>
             </>
-          ) : <p className="empty-state">{t('selectRule')}</p>}
-        </aside>
+          ) : (
+            <p className="empty-state p-8 text-center">{t('selectRule')}</p>
+          )}
+        </div>
       </div>
+
       <RuleProfileBuilder
         profiles={profiles}
         rules={rules}
@@ -1443,7 +1829,177 @@ function RulesView({
         onSave={() => void saveProfile()}
         onExport={() => void downloadProfiles()}
       />
-      <CustomRuleBuilder draft={draft} setDraft={setDraft} testResult={testResult} isTesting={isTesting} isSaving={isSaving} t={t} onTest={() => void runTestRule()} onSave={() => void saveRule()} />
+
+      {/* Custom Rule Engine Section */}
+      <div ref={customRuleSectionRef}>
+        <CustomRuleEngine
+          draft={draft}
+          setDraft={setDraft}
+          testResult={testResult}
+          isTesting={isTesting}
+          isSaving={isSaving}
+          t={t}
+          onAddQuickCondition={handleAddQuickCondition}
+          onTest={() => void runTestRule()}
+          onSave={() => void saveRule()}
+        />
+      </div>
+    </section>
+  );
+}
+
+function CustomRuleEngine({
+  draft,
+  setDraft,
+  testResult,
+  isTesting,
+  isSaving,
+  t,
+  onAddQuickCondition,
+  onTest,
+  onSave,
+}: {
+  draft: CustomRuleDefinition;
+  setDraft: React.Dispatch<React.SetStateAction<CustomRuleDefinition>>;
+  testResult: CustomRuleTestResult | null;
+  isTesting: boolean;
+  isSaving: boolean;
+  t: (key: string, values?: Record<string, unknown>) => string;
+  onAddQuickCondition: (type: 'workflow' | 'activity' | 'property' | 'regex') => void;
+  onTest: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <section className="builder-panel bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-4">
+      <div className="section-heading flex items-center justify-between border-b border-slate-100 pb-2">
+        <div>
+          <span className="eyebrow text-xs font-bold text-indigo-600 uppercase tracking-wide block">{t('customRuleEngine') || 'Özel Kural Oluşturucu'}</span>
+          <h2 className="text-base font-bold text-slate-800">{t('createRule')}</h2>
+        </div>
+        <div className="action-row compact-actions flex items-center gap-2">
+          <button type="button" onClick={onTest} disabled={isTesting} className="px-3 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded-lg hover:bg-slate-50">
+            {isTesting ? t('testing') : t('testRule')}
+          </button>
+          <button type="button" onClick={onSave} disabled={isSaving} className="px-3 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50">
+            {t('saveDraft')}
+          </button>
+          <button className="primary-action px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-sm" type="button" onClick={onSave} disabled={isSaving}>
+            {isSaving ? t('saving') : t('createRuleAction')}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-12 gap-4">
+        {/* Left Side: Quick Condition Component Buttons */}
+        <div className="col-span-4 bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">Hızlı Koşul Bileşenleri</h4>
+          <p className="text-[11px] text-slate-500">Aşağıdaki bileşen butonlarına basarak kuralınıza hazır koşullar ekleyebilirsiniz:</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => onAddQuickCondition('workflow')}
+              className="px-3 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-lg text-slate-700 hover:border-indigo-500 hover:text-indigo-600 flex items-center justify-center gap-1.5 shadow-sm"
+            >
+              <GitBranch size={14} />
+              <span>Workflow</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onAddQuickCondition('activity')}
+              className="px-3 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-lg text-slate-700 hover:border-indigo-500 hover:text-indigo-600 flex items-center justify-center gap-1.5 shadow-sm"
+            >
+              <Layers size={14} />
+              <span>Activity</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onAddQuickCondition('property')}
+              className="px-3 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-lg text-slate-700 hover:border-indigo-500 hover:text-indigo-600 flex items-center justify-center gap-1.5 shadow-sm"
+            >
+              <Code size={14} />
+              <span>Property</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onAddQuickCondition('regex')}
+              className="px-3 py-2 text-xs font-semibold bg-white border border-slate-300 rounded-lg text-slate-700 hover:border-indigo-500 hover:text-indigo-600 flex items-center justify-center gap-1.5 shadow-sm"
+            >
+              <Search size={14} />
+              <span>Regex</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Right Side: Form Inputs */}
+        <div className="col-span-8 space-y-3">
+          <div className="grid grid-cols-3 gap-3 text-xs">
+            <label className="flex flex-col gap-1 font-semibold text-slate-700">
+              {t('ruleId')}
+              <input className="p-1.5 border border-slate-300 rounded font-mono text-xs" value={draft.id} onChange={(event) => setDraft((rule) => ({ ...rule, id: event.target.value }))} />
+            </label>
+            <label className="flex flex-col gap-1 font-semibold text-slate-700">
+              {t('ruleName')}
+              <input className="p-1.5 border border-slate-300 rounded text-xs" value={draft.name} onChange={(event) => setDraft((rule) => ({ ...rule, name: event.target.value }))} />
+            </label>
+            <label className="flex flex-col gap-1 font-semibold text-slate-700">
+              {t('category')}
+              <select className="p-1.5 border border-slate-300 rounded text-xs" value={draft.category} onChange={(event) => setDraft((rule) => ({ ...rule, category: event.target.value }))}>
+                {ruleCategories().map((item) => <option key={item}>{item}</option>)}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 font-semibold text-slate-700">
+              {t('severity')}
+              <select className="p-1.5 border border-slate-300 rounded text-xs" value={draft.severity} onChange={(event) => setDraft((rule) => ({ ...rule, severity: event.target.value }))}>
+                {ruleSeverities().map((item) => <option key={item}>{item}</option>)}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 font-semibold text-slate-700">
+              Pattern / Regex
+              <input className="p-1.5 border border-slate-300 rounded text-xs font-mono" placeholder=".*pattern.*" value={draft.conditions[0]?.value || ''} onChange={(e) => updateCondition(setDraft, 0, { value: e.target.value })} />
+            </label>
+            <label className="flex flex-col gap-1 font-semibold text-slate-700">
+              {t('scope')}
+              <select className="p-1.5 border border-slate-300 rounded text-xs" value={draft.scope} onChange={(event) => setDraft((rule) => ({ ...rule, scope: event.target.value }))}>
+                {ruleScopes().map((item) => <option key={item}>{item}</option>)}
+              </select>
+            </label>
+            <label className="col-span-3 flex flex-col gap-1 font-semibold text-slate-700">
+              {t('description')}
+              <textarea className="p-1.5 border border-slate-300 rounded text-xs h-16" value={draft.description ?? ''} onChange={(event) => setDraft((rule) => ({ ...rule, description: event.target.value }))} />
+            </label>
+          </div>
+
+          {/* Conditions List */}
+          <div className="conditions-list bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
+            <h4 className="text-xs font-bold text-slate-700">{t('conditions')} ({draft.conditions.length})</h4>
+            {draft.conditions.map((condition, index) => (
+              <div className="condition-row flex items-center gap-2 flex-wrap" key={index}>
+                <select className="p-1 text-xs border border-slate-300 rounded" value={condition.field} onChange={(event) => updateCondition(setDraft, index, { field: event.target.value })}>
+                  {conditionFields().map((item) => <option key={item}>{item}</option>)}
+                </select>
+                <select className="p-1 text-xs border border-slate-300 rounded" value={condition.operator} onChange={(event) => updateCondition(setDraft, index, { operator: event.target.value })}>
+                  {conditionOperators().map((item) => <option key={item}>{item}</option>)}
+                </select>
+                <input className="p-1 text-xs border border-slate-300 rounded w-28" value={condition.propertyName ?? ''} onChange={(event) => updateCondition(setDraft, index, { propertyName: event.target.value })} placeholder={t('propertyName')} disabled={condition.field !== 'Activity.Property'} />
+                <input className="p-1 text-xs border border-slate-300 rounded flex-1" value={condition.value ?? ''} onChange={(event) => updateCondition(setDraft, index, { value: event.target.value })} placeholder={t('value')} />
+                <button type="button" className="px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 rounded border border-rose-200" onClick={() => removeCondition(setDraft, index)}>{t('remove')}</button>
+              </div>
+            ))}
+            <button type="button" className="text-xs font-semibold text-indigo-600 hover:underline inline-flex items-center gap-1" onClick={() => setDraft((rule) => ({ ...rule, conditions: [...rule.conditions, { field: 'Activity.Name', operator: 'Equals', value: '', caseSensitive: false }] }))}>
+              <Plus size={12} />
+              <span>{t('addCondition')}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {testResult && (
+        <div className="test-result bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs space-y-1">
+          <h3 className="font-bold text-slate-800">{t('testRuleResult')}</h3>
+          <p>{t('customRuleMatches', { activities: testResult.matchedActivityCount, workflows: testResult.matchedWorkflowCount, findings: testResult.estimatedFindingCount })}</p>
+          {testResult.hasNoiseWarning && <p className="text-amber-700 bg-amber-50 p-1.5 rounded">{testResult.noiseWarning}</p>}
+        </div>
+      )}
     </section>
   );
 }

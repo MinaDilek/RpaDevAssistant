@@ -1281,6 +1281,179 @@ tr:last-child td {
   padding-left: 18px;
 }
 
+/* IDE / SaaS Dashboard Styling for Rule Catalog */
+.app-shell {
+  background-color: #f8fafc;
+}
+
+.sidebar-nav button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sidebar-nav button.active {
+  background-color: #e0e7ff;
+  color: #4338ca;
+  font-weight: 700;
+  border-right: 3px solid #4338ca;
+}
+
+.nav-badge-active {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  background-color: #dcfce7;
+  color: #15803d;
+  padding: 2px 6px;
+  border-radius: 9999px;
+  text-transform: uppercase;
+}
+
+.top-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.topbar-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.topbar-chip.branch-chip {
+  background-color: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.topbar-chip.time-chip {
+  background-color: #f8fafc;
+  border-color: #e2e8f0;
+  color: #64748b;
+}
+
+.search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.search-wrap input {
+  padding-left: 32px !important;
+}
+
+.btn-ai-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background-color: #312e81;
+  color: #ffffff;
+  border: 1px solid #4338ca;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.btn-ai-action:hover:not(:disabled) {
+  background-color: #3730a3;
+  box-shadow: 0 4px 12px rgba(49, 46, 129, 0.25);
+}
+
+.btn-static-analysis {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background-color: #2563eb;
+  color: #ffffff;
+  border: 1px solid #1d4ed8;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.btn-static-analysis:hover:not(:disabled) {
+  background-color: #1d4ed8;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+}
+
+.mini-profile-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  width: 100%;
+}
+
+.mini-profile-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.mini-profile-info .user-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.mini-profile-info .team-info {
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.preview-block {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  border: 1px solid #1e293b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  border-radius: 8px;
+}
+
+.selected-row {
+  background-color: #e0e7ff !important;
+  border-left: 4px solid #4338ca !important;
+}
+
+.category-icon.security { color: #f43f5e; }
+.category-icon.reliability { color: #f59e0b; }
+.category-icon.maintainability { color: #6366f1; }
+.category-icon.performance { color: #10b981; }
+.category-icon.default { color: #0ea5e9; }
+
 @media (max-width: 960px) {
   body {
     min-width: 0;
