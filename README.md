@@ -93,6 +93,10 @@ Current rules:
 | RPA023 | HTTP Request Without Local Error Handling | ExceptionHandling | Warning | Detects HTTP Request activities outside a local TryCatch hierarchy. |
 | RPA024 | Excessive Workflow Arguments | Architecture | Suggestion | Detects workflows with more than 10 arguments. |
 | RPA025 | Large Workflow | Maintainability | Warning | Detects workflows over 100 executable activities or hierarchy depth over 12. |
+| RPA026 | Possibly Unused Dependency | Configuration | Suggestion | Detects known UiPath package families that have no mapped parsed activity usage. |
+| RPA027 | Package Version Alignment Risk | Architecture | Warning | Detects significant major-version alignment gaps between modern UiPath packages. |
+| RPA028 | Mixed Modern and Classic Activity Usage | UiAutomation | Info | Detects projects that contain both modern and classic UI automation activity signals. |
+| RPA029 | Legacy Package Indicator | Architecture | Suggestion | Detects declared packages that match known legacy/classic package indicators. |
 
 Static analysis coverage includes exception handling, logging, UI automation, selector quality, security, configuration, HTTP reliability, workflow architecture, maintainability, and performance.
 
@@ -103,6 +107,75 @@ Rule metadata is available through:
 ```bash
 curl http://localhost:5000/api/uipath/rules
 ```
+
+## Dependency / Package Analysis
+
+Dependency analysis is offline-first and uses `project.json` plus the already-parsed in-memory workflow/activity model. It does not query NuGet, UiPath Marketplace, Orchestrator, or the internet, and it does not re-read every XAML file per rule.
+
+Dependency flow:
+
+```text
+project.json dependencies
+↓
+Parsed workflow/activity metadata
+↓
+IUiPathPackageActivityMapper
+↓
+IUiPathDependencyAnalyzer
+↓
+UiPathDependencySummary
+↓
+Rules, reports, UI, Ask Project, custom rules
+```
+
+The mapper keeps package-to-activity knowledge in one place. Known package families include System, UI Automation, Excel, Mail, WebAPI, Database, Credentials, Orchestrator/Persistence, Document Understanding/OCR, and PDF. Matching uses package family, activity namespace fragments, and normalized activity names.
+
+Usage statuses:
+
+| Status | Meaning |
+| --- | --- |
+| Used | At least one parsed activity maps to the package family. |
+| PossiblyUnused | A known UiPath package family is declared, but no parsed activity maps to it. |
+| Unknown | The package cannot be safely mapped, usually custom or third-party packages. |
+
+Unknown custom packages are intentionally not reported as unused. They may be used from custom activities, `Invoke Code`, runtime loading, or vendor-specific activity names that are not in the built-in mapper yet.
+
+Dependency-related rules:
+
+| ID | Name | What It Checks |
+| --- | --- | --- |
+| RPA026 | Possibly Unused Dependency | Known UiPath packages with no mapped activity usage. |
+| RPA027 | Package Version Alignment Risk | Significant major-version gaps across modern UiPath package versions. |
+| RPA028 | Mixed Modern and Classic Activity Usage | Modern and classic UI automation activity signals in the same project. |
+| RPA029 | Legacy Package Indicator | Known legacy/classic package family indicators. |
+
+Version risk analysis is conservative. The current MVP can detect local alignment risks from declared versions, but it does not know whether a package is latest, deprecated, vulnerable, or superseded. Those checks require a future package metadata source.
+
+The analyze response includes `dependencyAnalysis`:
+
+```json
+{
+  "dependencyAnalysis": {
+    "totalDependencies": 6,
+    "uiPathDependencies": 6,
+    "thirdPartyDependencies": 0,
+    "usedDependencies": 5,
+    "possiblyUnusedDependencies": 1,
+    "potentialConflicts": 0,
+    "legacyIndicators": 0,
+    "modernClassicMode": "Classic",
+    "packages": []
+  }
+}
+```
+
+HTML reports include the same dependency summary and package table. JSON export keeps canonical field names such as `projectName`, `findings`, `qualityScore`, and `dependencyAnalysis`.
+
+Ask Project can answer dependency questions locally without AI, for example:
+
+- `Hangi package'lar kullanılmıyor olabilir?`
+- `Which workflows use UiPath.Excel.Activities?`
+- `Modern / Classic activity mode nedir?`
 
 To add a new rule:
 
@@ -213,6 +286,98 @@ Default levels:
 
 RPA025 (`Large Workflow`) now uses both executable activity count and complexity level. A workflow can be flagged when it is structurally complex even if it is below the raw activity-count threshold.
 
+## Flowchart Conversion Analysis
+
+RPA Dev Assistant can detect Flowchart-based UiPath workflows, produce a Sequence conversion preview, and apply only conversions classified as `Safe`. Risky or unsupported Flowcharts remain preview-only. Apply is controlled, single-workflow only, and always uses stale-file protection, backup creation, post-write validation, and rollback support.
+
+Flowchart analysis flow:
+
+```text
+UiPath Workflow
+↓
+Structure detection
+↓
+Flowchart graph analysis
+↓
+Convertibility assessment
+↓
+Conversion plan
+↓
+Semantic Sequence preview
+↓
+Controlled apply for Safe conversions only
+↓
+Backup / validation / rollback
+```
+
+Workflow structure types:
+
+| Type | Meaning |
+| --- | --- |
+| Sequence | The workflow root is a Sequence. |
+| Flowchart | The workflow root is a Flowchart. |
+| StateMachine | The workflow root is a State Machine. |
+| Mixed | Multiple root-level structure types were detected. |
+| Unknown | The structure could not be determined. |
+
+The Flowchart graph model includes nodes, edges, decisions, switches, cycle detection, unreachable-node detection, entry/exit counts, merge count, and maximum path depth. FlowDecision nodes are represented as decision nodes with True/False branches. FlowSwitch nodes are represented with Case/Default branches when those relationships are visible in XAML.
+
+Conversion assessment levels:
+
+| Level | Meaning |
+| --- | --- |
+| Safe | Acyclic linear or simple structured Flowchart that can be previewed as Sequence/If/Switch. |
+| RequiresReview | Previewable, but branch, merge, or switch semantics should be reviewed in UiPath Studio. |
+| Complex | Cycles or control-flow patterns exist; no automatic loop conversion is inferred. |
+| NotSupported | Required graph information or supported node patterns are missing. |
+
+Safe conversion criteria are intentionally conservative. Linear Flowcharts become a Sequence preview. Simple FlowDecision patterns become an If preview. FlowSwitch patterns become a Switch preview. Shared merge nodes are treated as continuation nodes after branches so they are not duplicated in each branch.
+
+Unsupported patterns include cycles, ambiguous shared subgraphs, unreachable nodes that affect behavior, unknown flow node types, and State Machine conversion. Cycles are never guessed as While or Do While; the tool only reports that manual review is required.
+
+Preview endpoint:
+
+```bash
+curl -X POST http://localhost:5000/api/uipath/workflows/flowchart-conversion/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"projectPath": "/path/to/uipath/project", "workflowPath": "Framework/SetTransactionStatus.xaml"}'
+```
+
+Controlled apply endpoint:
+
+```bash
+curl -X POST http://localhost:5000/api/uipath/workflows/flowchart-conversion/apply \
+  -H "Content-Type: application/json" \
+  -d '{"projectPath": "/path/to/uipath/project", "workflowPath": "Framework/SetTransactionStatus.xaml", "expectedWorkflowHash": "...", "confirmed": true}'
+```
+
+Rollback endpoint:
+
+```bash
+curl -X POST http://localhost:5000/api/uipath/workflows/flowchart-conversion/rollback \
+  -H "Content-Type: application/json" \
+  -d '{"projectPath": "/path/to/uipath/project", "workflowPath": "Framework/SetTransactionStatus.xaml", "backupId": "...", "expectedCurrentHash": "..."}'
+```
+
+The API never accepts generated XAML, arbitrary file content, or arbitrary restore paths from the frontend. The backend regenerates the conversion plan from the current workflow before writing. A stale hash mismatch blocks apply, and rollback only accepts backups created by RPA Dev Assistant for Flowchart conversion.
+
+Example preview shape:
+
+```text
+Sequence
+└── If - Success
+    Condition: [in_BusinessRuleException is Nothing and in_SystemError is Nothing]
+```
+
+Ask Project can answer Flowchart questions locally without AI:
+
+- `Hangi workflow'lar Flowchart kullanıyor?`
+- `Kaç Flowchart workflow var?`
+- `Which Flowchart workflows are safe to convert to Sequence?`
+- `Hangi Flowchart'larda cycle var?`
+
+HTML reports include a `Flowchart Analysis` / `Flowchart Analizi` section with Flowchart workflow count, safe conversion candidates, review-required candidates, complex/not-supported counts, and candidate rows.
+
 Default rule profile:
 
 | Rule | Enabled | Severity Override | Weight | Max Penalty |
@@ -254,7 +419,7 @@ curl "http://localhost:5000/api/uipath/rules/RPA007?locale=tr"
 
 Rule sources:
 
-- `BuiltIn`: compiled deterministic analyzer rules, currently `RPA001` through `RPA025`.
+- `BuiltIn`: compiled deterministic analyzer rules, currently `RPA001` through `RPA029`.
 - `Custom`: local declarative rules created by the user.
 
 Custom rules are intentionally declarative. They do not execute user code, scripts, regular expressions, package queries, shell commands, or arbitrary expressions. A custom rule consists of metadata, scope, severity, scoring settings, and simple conditions joined by `All` or `Any`.
@@ -283,6 +448,9 @@ Supported condition fields:
 | Project.IsReFramework | Boolean REFramework heuristic |
 | Dependency.Name | Project dependency name |
 | Dependency.Version | Project dependency version |
+| Dependency.Category | Offline dependency category such as Excel, Mail, UIAutomation, WebAPI, or Other |
+| Dependency.UsageStatus | Offline usage status: Used, PossiblyUnused, or Unknown |
+| Dependency.RiskLevel | Offline dependency risk level: Low, Medium, High, or Critical |
 
 Supported operators:
 

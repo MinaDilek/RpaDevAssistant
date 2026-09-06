@@ -13,7 +13,9 @@ public sealed class UiPathBackupService : IUiPathBackupService
         string ruleId,
         string propertyName,
         string? previousValue,
-        string? newValue)
+        string? newValue,
+        string? operationType = null,
+        string? conversionPlanVersion = null)
     {
         var backupId = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmssfff", System.Globalization.CultureInfo.InvariantCulture);
         var backupRoot = Path.Combine(projectPath, ".rpadevassistant", "backups", backupId);
@@ -36,7 +38,9 @@ public sealed class UiPathBackupService : IUiPathBackupService
                     AppliedRuleId = ruleId,
                     PropertyName = propertyName,
                     PreviousValue = previousValue,
-                    NewValue = newValue
+                    NewValue = newValue,
+                    OperationType = operationType,
+                    ConversionPlanVersion = conversionPlanVersion
                 }
             ]
         };

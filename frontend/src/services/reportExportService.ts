@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { getBackendBaseUrl } from './apiClient';
 import { isTauriDesktop } from './environment';
 
-export type ReportFormat = 'json' | 'html';
+export type ReportFormat = 'json' | 'html' | 'pdf';
 
 export interface ExportReportInput {
   projectPath: string;
@@ -23,7 +23,7 @@ export async function exportReport(input: ExportReportInput): Promise<string> {
       defaultPath: defaultFileName,
       filters: [
         {
-          name: input.format === 'html' ? 'HTML Report' : 'JSON Report',
+          name: input.format === 'html' ? 'HTML Report' : input.format === 'pdf' ? 'PDF Report' : 'JSON Report',
           extensions: [input.format],
         },
       ],
@@ -85,7 +85,7 @@ async function fetchReport(projectPath: string, profileId: string, format: Repor
   const contentDisposition = response.headers.get('content-disposition');
   return {
     content: await response.text(),
-    contentType: response.headers.get('content-type') ?? (format === 'html' ? 'text/html' : 'application/json'),
+    contentType: response.headers.get('content-type') ?? (format === 'html' ? 'text/html' : format === 'pdf' ? 'application/pdf' : 'application/json'),
     fileName: parseFileName(contentDisposition),
   };
 }

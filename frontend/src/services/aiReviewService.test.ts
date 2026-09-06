@@ -28,7 +28,7 @@ describe('runAiReview', () => {
     expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:5000/api/uipath/projects/ai-review', expect.objectContaining({
       method: 'POST',
     }));
-    const request = (fetchMock as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0][1];
+    const request = findRequest(fetchMock, '/api/uipath/projects/ai-review');
     expect(JSON.parse(String(request.body))).toMatchObject({
       scope: 'Workflow',
       workflowPath: 'Main.xaml',
@@ -59,3 +59,13 @@ describe('runAiReview', () => {
     await expect(runAiReview({ projectPath: '/tmp/project', scope: 'Project' })).rejects.toThrow('AI Review is not configured');
   });
 });
+
+function findRequest(fetchMock: ReturnType<typeof vi.fn>, path: string): RequestInit {
+  const call = (fetchMock as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls
+    .find(([url]) => String(url).includes(path));
+  if (!call) {
+    throw new Error(`Expected request to ${path}.`);
+  }
+
+  return call[1];
+}

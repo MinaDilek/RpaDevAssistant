@@ -21,7 +21,7 @@ public sealed class UiPathDependencyAnalyzer : IUiPathDependencyAnalyzer
         var usage = BuildUsageIndex(project);
         var majorVersions = project.Dependencies
             .Select(dependency => new { dependency.Name, Major = TryReadMajorVersion(dependency.Version) })
-            .Where(item => item.Major is not null && item.Name.StartsWith("UiPath.", StringComparison.OrdinalIgnoreCase))
+            .Where(item => item.Major is >= 10 && item.Name.StartsWith("UiPath.", StringComparison.OrdinalIgnoreCase))
             .ToArray();
         var hasMajorAlignmentRisk = majorVersions.Select(item => item.Major!.Value).Distinct().Count() > 1
             && majorVersions.Max(item => item.Major!.Value) - majorVersions.Min(item => item.Major!.Value) >= 3;
@@ -67,7 +67,7 @@ public sealed class UiPathDependencyAnalyzer : IUiPathDependencyAnalyzer
             risk = Max(risk, UiPathDependencyRiskLevel.Medium);
         }
 
-        if (hasMajorAlignmentRisk && mapping.IsUiPathPackage && TryReadMajorVersion(dependency.Version) is not null)
+        if (hasMajorAlignmentRisk && mapping.IsUiPathPackage && TryReadMajorVersion(dependency.Version) is >= 10)
         {
             compatibilityStatus = UiPathDependencyCompatibilityStatus.PotentialConflict;
             findings.Add("UiPath package major versions differ significantly from other declared UiPath packages. This is an offline heuristic.");

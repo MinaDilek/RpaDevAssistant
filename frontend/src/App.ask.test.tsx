@@ -18,6 +18,8 @@ vi.mock('./services/apiClient', () => ({
   getFixSuggestion: (...args: unknown[]) => getFixSuggestion(...args),
   applyFix: (...args: unknown[]) => applyFix(...args),
   listBackups: (...args: unknown[]) => listBackups(...args),
+  listAnalysisHistory: vi.fn(async () => ({ snapshots: [] })),
+  compareAnalysisSnapshots: vi.fn(async () => ({ newFindings: [], resolvedFindings: [], unchangedFindings: [], changedFindings: [], workflowChanges: [], scoreDelta: 0, totalFindingDelta: 0, workflowCountDelta: 0, activityCountDelta: 0, baselineSnapshotId: 'a', targetSnapshotId: 'b' })),
   undoFix: (...args: unknown[]) => undoFix(...args),
   setApiLocale: vi.fn(),
   checkHealth: vi.fn(async () => true),

@@ -17,7 +17,10 @@ public sealed class UiPathCustomRuleValidator : IUiPathCustomRuleValidator
         "Project.Compatibility",
         "Project.IsReFramework",
         "Dependency.Name",
-        "Dependency.Version"
+        "Dependency.Version",
+        "Dependency.Category",
+        "Dependency.UsageStatus",
+        "Dependency.RiskLevel"
     };
 
     private static readonly HashSet<string> NumericFields = new(StringComparer.OrdinalIgnoreCase)

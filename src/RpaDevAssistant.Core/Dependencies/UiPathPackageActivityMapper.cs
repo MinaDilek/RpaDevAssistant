@@ -18,6 +18,7 @@ public sealed class UiPathPackageActivityMapper : IUiPathPackageActivityMapper
         new("UiPath.Persistence.Activities", UiPathPackageCategory.Orchestrator, ["Persistence.Activities"], ["CreateFormTask", "WaitForTaskAndResume"]),
         new("UiPath.DocumentUnderstanding", UiPathPackageCategory.DocumentUnderstanding, ["DocumentUnderstanding", "IntelligentOCR"], ["DigitizeDocument", "DataExtractionScope", "PresentValidationStation"]),
         new("UiPath.IntelligentOCR", UiPathPackageCategory.DocumentUnderstanding, ["IntelligentOCR"], ["DigitizeDocument", "DataExtractionScope"]),
+        new("UiPath.OCR.Activities", UiPathPackageCategory.DocumentUnderstanding, ["OCR.Activities"], ["ReadPDFWithOCR", "DigitizeDocument"]),
         new("UiPath.PDF.Activities", UiPathPackageCategory.PDF, ["PDF.Activities"], ["ReadPDFText", "ReadPDFWithOCR", "ExtractPDFPageRange"])
     ];
 

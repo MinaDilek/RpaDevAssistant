@@ -117,9 +117,9 @@ public sealed class UiPathProjectRetriever : IUiPathProjectRetriever
             });
         }
 
-        foreach (var dependency in analysis.ProjectScan.Dependencies)
+        foreach (var dependency in analysis.ProjectScan.DependencyAnalysis?.Packages ?? [])
         {
-            var score = ScoreText(query, tokens, dependency.Name, dependency.Version);
+            var score = ScoreText(query, tokens, dependency.Name, dependency.DeclaredVersion, dependency.Category.ToString(), dependency.UsageStatus.ToString(), dependency.RiskLevel.ToString());
             if (score <= 0)
             {
                 continue;
@@ -128,8 +128,8 @@ public sealed class UiPathProjectRetriever : IUiPathProjectRetriever
             evidence.Add(new UiPathProjectEvidence
             {
                 Type = UiPathProjectEvidenceType.Dependency,
-                Description = $"Dependency {dependency.Name} {dependency.Version}",
-                Value = dependency.Version,
+                Description = $"Dependency {dependency.Name} {dependency.DeclaredVersion}: {dependency.Category}, {dependency.UsageStatus}, {dependency.RiskLevel}.",
+                Value = dependency.DeclaredVersion,
                 RelevanceScore = score + UiPathProjectRetrievalWeights.DependencyMatch
             });
         }

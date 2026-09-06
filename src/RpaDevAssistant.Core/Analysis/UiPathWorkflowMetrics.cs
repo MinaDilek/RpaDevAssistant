@@ -84,6 +84,34 @@ public sealed record UiPathWorkflowComplexity
     public UiPathWorkflowComplexityLevel ComplexityLevel { get; init; }
 }
 
+public sealed record UiPathWorkflowComplexitySummary
+{
+    public int TotalWorkflowCount { get; init; }
+
+    public int LowCount { get; init; }
+
+    public int MediumCount { get; init; }
+
+    public int HighCount { get; init; }
+
+    public int VeryHighCount { get; init; }
+
+    public IReadOnlyList<UiPathTopComplexWorkflow> TopComplexWorkflows { get; init; } = [];
+}
+
+public sealed record UiPathTopComplexWorkflow
+{
+    public required string WorkflowPath { get; init; }
+
+    public int ComplexityScore { get; init; }
+
+    public UiPathWorkflowComplexityLevel ComplexityLevel { get; init; }
+
+    public int ExecutableActivityCount { get; init; }
+
+    public int MaxNestingDepth { get; init; }
+}
+
 public interface IUiPathWorkflowMetricsCalculator
 {
     UiPathWorkflowMetrics Calculate(UiPathWorkflowAnalysis workflow);

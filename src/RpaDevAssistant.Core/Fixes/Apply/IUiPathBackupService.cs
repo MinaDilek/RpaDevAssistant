@@ -11,5 +11,7 @@ public interface IUiPathBackupService
         string ruleId,
         string propertyName,
         string? previousValue,
-        string? newValue);
+        string? newValue,
+        string? operationType = null,
+        string? conversionPlanVersion = null);
 }

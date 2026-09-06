@@ -1,5 +1,6 @@
 using System.Globalization;
 using RpaDevAssistant.Core.Analysis.RuleCatalog;
+using RpaDevAssistant.Core.Dependencies;
 using RpaDevAssistant.Core.Models;
 
 namespace RpaDevAssistant.Core.Analysis.CustomRules;
@@ -105,6 +106,19 @@ public sealed class UiPathCustomRuleEvaluator : IUiPathCustomRuleEvaluator
 
     private static IEnumerable<UiPathAnalysisFinding> EvaluateProjectRule(UiPathAnalysisContext context, UiPathCustomRuleDefinition rule)
     {
+        if (rule.Conditions.Any(condition => condition.Field.StartsWith("Dependency.", StringComparison.OrdinalIgnoreCase)))
+        {
+            foreach (var dependency in context.Project.DependencyAnalysis?.Packages ?? [])
+            {
+                if (Matches(rule, condition => ResolveDependencyValue(dependency, condition)))
+                {
+                    yield return Finding(rule, dependency);
+                }
+            }
+
+            yield break;
+        }
+
         if (Matches(rule, condition => ResolveValue(context.Project, null, null, condition)))
         {
             yield return Finding(rule, null, null);
@@ -134,6 +148,22 @@ public sealed class UiPathCustomRuleEvaluator : IUiPathCustomRuleEvaluator
             "Project.IsReFramework" => project.IsReFramework,
             "Dependency.Name" => project.Dependencies.Select(dependency => dependency.Name).ToArray(),
             "Dependency.Version" => project.Dependencies.Select(dependency => dependency.Version).Where(version => !string.IsNullOrWhiteSpace(version)).ToArray(),
+            "Dependency.Category" => project.DependencyAnalysis?.Packages.Select(dependency => dependency.Category.ToString()).ToArray(),
+            "Dependency.UsageStatus" => project.DependencyAnalysis?.Packages.Select(dependency => dependency.UsageStatus.ToString()).ToArray(),
+            "Dependency.RiskLevel" => project.DependencyAnalysis?.Packages.Select(dependency => dependency.RiskLevel.ToString()).ToArray(),
+            _ => null
+        };
+    }
+
+    private static object? ResolveDependencyValue(UiPathDependencyAnalysis dependency, UiPathRuleCondition condition)
+    {
+        return condition.Field switch
+        {
+            "Dependency.Name" => dependency.Name,
+            "Dependency.Version" => dependency.DeclaredVersion,
+            "Dependency.Category" => dependency.Category.ToString(),
+            "Dependency.UsageStatus" => dependency.UsageStatus.ToString(),
+            "Dependency.RiskLevel" => dependency.RiskLevel.ToString(),
             _ => null
         };
     }
@@ -294,6 +324,24 @@ public sealed class UiPathCustomRuleEvaluator : IUiPathCustomRuleEvaluator
             Scope = rule.Scope == UiPathRuleScope.Project
                 ? UiPathFindingScope.Project
                 : rule.Scope == UiPathRuleScope.Workflow ? UiPathFindingScope.Workflow : UiPathFindingScope.Activity,
+            Source = "Custom"
+        };
+    }
+
+    private static UiPathAnalysisFinding Finding(UiPathCustomRuleDefinition rule, UiPathDependencyAnalysis dependency)
+    {
+        return new UiPathAnalysisFinding
+        {
+            RuleId = rule.Id,
+            RuleName = CustomText(rule.Name, rule.NameEn, rule.NameTr),
+            Severity = rule.Severity,
+            Category = rule.Category,
+            Message = CustomText(rule.Description ?? $"Custom rule '{rule.Name}' matched.", rule.DescriptionEn, rule.DescriptionTr),
+            Description = CustomText(rule.Description ?? string.Empty, rule.DescriptionEn, rule.DescriptionTr),
+            Recommendation = CustomText(rule.Recommendation ?? string.Empty, rule.RecommendationEn, rule.RecommendationTr),
+            PropertyName = "dependencies",
+            CurrentValue = $"{dependency.Name} ({dependency.UsageStatus}, {dependency.RiskLevel})",
+            Scope = UiPathFindingScope.Project,
             Source = "Custom"
         };
     }

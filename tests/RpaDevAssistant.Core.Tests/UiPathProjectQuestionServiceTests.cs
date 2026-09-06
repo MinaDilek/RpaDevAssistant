@@ -5,6 +5,7 @@ using RpaDevAssistant.Core.Analysis.CustomRules;
 using RpaDevAssistant.Core.Analysis.Profiles;
 using RpaDevAssistant.Core.Analysis.RuleCatalog;
 using RpaDevAssistant.Core.Analysis.Scoring;
+using RpaDevAssistant.Core.History;
 using RpaDevAssistant.Core.Models;
 using RpaDevAssistant.Core.ProjectAssistant;
 using Xunit;
@@ -290,7 +291,7 @@ public sealed class UiPathProjectQuestionServiceTests
         return new UiPathProjectRetriever(new SensitiveValueRedactor());
     }
 
-    private static UiPathProjectQuestionService Service(FakeAssistantProvider? provider = null)
+    private static UiPathProjectQuestionService Service(FakeAssistantProvider? provider = null, IUiPathAnalysisHistoryService? historyService = null)
     {
         return new UiPathProjectQuestionService(
             new FakeAnalyzer(Project()),
@@ -323,7 +324,8 @@ public sealed class UiPathProjectQuestionServiceTests
                         }
                     ]
                 }
-            ]));
+            ]),
+            analysisHistoryService: historyService);
     }
 
     private static UiPathProjectQuestion Question(string question, int? maxEvidenceItems = null, string? locale = null)
@@ -434,6 +436,30 @@ public sealed class UiPathProjectQuestionServiceTests
         Assert.Contains("Framework/Process.xaml", answer.Answer);
     }
 
+    [Fact]
+    public async Task DirectAnswer_ReturnsAnalysisHistoryComparisonWithoutAi()
+    {
+        using var directory = new TempQuestionHistoryDirectory();
+        var history = directory.CreateService();
+        history.SaveSnapshot(Project());
+        var improved = Project() with
+        {
+            Analysis = new UiPathStaticAnalysisResult(),
+            QualityScore = Project().QualityScore with { Score = 88, Grade = "B", TotalFindings = 0 }
+        };
+        history.SaveSnapshot(improved);
+
+        var answer = await Service(historyService: history).AskAsync(new UiPathProjectQuestion
+        {
+            ProjectPath = "/tmp/project",
+            Question = "Skor önceki analize göre değişti mi?",
+            Locale = "tr"
+        }, CancellationToken.None);
+
+        Assert.False(answer.UsedAi);
+        Assert.Contains("Önceki analize göre skor", answer.Answer);
+    }
+
     private static UiPathWorkflowInfo Workflow(string path, params UiPathActivityInfo[] activities)
     {
         var analysis = new UiPathWorkflowAnalysis
@@ -462,6 +488,24 @@ public sealed class UiPathProjectQuestionServiceTests
             XamlFile = "placeholder.xaml",
             Properties = properties.ToDictionary(property => property.Key, property => (string?)property.Value)
         };
+    }
+
+    private sealed class TempQuestionHistoryDirectory : IDisposable
+    {
+        private readonly string root = Path.Combine(Path.GetTempPath(), $"rpada-question-history-{Guid.NewGuid():N}");
+
+        public IUiPathAnalysisHistoryService CreateService()
+        {
+            return new UiPathAnalysisHistoryService(new UiPathAnalysisHistoryOptions { StorageRoot = root });
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
     }
 
     private static UiPathAnalysisFinding Finding(string ruleId, string ruleName, RuleSeverity severity, RuleCategory category, string workflowPath, string message)

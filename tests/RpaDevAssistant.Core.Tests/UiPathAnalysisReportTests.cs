@@ -158,12 +158,31 @@ public sealed class UiPathAnalysisReportTests
     }
 
     [Fact]
+    public void FileNameGenerator_UsesPdfExtension()
+    {
+        var fileName = UiPathReportFileNameGenerator.Generate("Invoice Bot", new DateTimeOffset(2026, 8, 29, 22, 45, 0, TimeSpan.Zero), UiPathReportExportFormat.Pdf);
+
+        Assert.Equal("Invoice-Bot-RPA-Analysis-20260829-224500.pdf", fileName);
+    }
+
+    [Fact]
     public void Exporters_ReturnExpectedContentTypes()
     {
         var report = BuildReport(Findings());
 
         Assert.Equal("application/json; charset=utf-8", new JsonUiPathReportExporter().Export(report).ContentType);
         Assert.Equal("text/html; charset=utf-8", new HtmlUiPathReportExporter().Export(report).ContentType);
+        Assert.Equal("application/pdf", new PdfUiPathReportExporter().Export(report).ContentType);
+    }
+
+    [Fact]
+    public void PdfExporter_ProducesValidPdfHeader()
+    {
+        var export = new PdfUiPathReportExporter().Export(BuildReport(Findings(Finding("RPA001", RuleSeverity.Warning, "Main.xaml"))));
+
+        Assert.StartsWith("%PDF-1.4", export.Content, StringComparison.Ordinal);
+        Assert.Contains("RPA Dev Assistant Analysis Report", export.Content, StringComparison.Ordinal);
+        Assert.Contains("%%EOF", export.Content, StringComparison.Ordinal);
     }
 
     private static UiPathAnalysisReport BuildReport(UiPathStaticAnalysisResult analysis)

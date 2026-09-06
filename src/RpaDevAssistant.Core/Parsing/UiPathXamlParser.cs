@@ -1,5 +1,6 @@
 using System.Xml;
 using System.Xml.Linq;
+using RpaDevAssistant.Core.Flowcharts;
 using RpaDevAssistant.Core.Models;
 
 namespace RpaDevAssistant.Core.Parsing;
@@ -92,6 +93,11 @@ public sealed class UiPathXamlParser : IUiPathXamlParser
             {
                 ParseActivities(document.Root, analysis, parentActivityId: null, depth: 0, activityPath: "0", forceDescendantScan: true);
             }
+
+            analysis.StructureType = DetectStructureType(analysis);
+            analysis.ContainsFlowchart = analysis.Activities.Any(activity => activity.Name.Equals("Flowchart", StringComparison.OrdinalIgnoreCase));
+            analysis.FlowchartCount = analysis.Activities.Count(activity => activity.Name.Equals("Flowchart", StringComparison.OrdinalIgnoreCase));
+            analysis.ContainsStateMachine = analysis.Activities.Any(activity => activity.Name.Contains("StateMachine", StringComparison.OrdinalIgnoreCase));
         }
         catch (XmlException ex)
         {
@@ -334,5 +340,46 @@ public sealed class UiPathXamlParser : IUiPathXamlParser
         return string.IsNullOrWhiteSpace(relativePath)
             ? "."
             : relativePath.Replace(Path.DirectorySeparatorChar, '/');
+    }
+
+    private static UiPathWorkflowStructureType DetectStructureType(UiPathWorkflowAnalysis analysis)
+    {
+        var topLevel = analysis.Activities
+            .Where(activity => activity.ParentActivityId is null || activity.Depth == 0)
+            .Select(activity => NormalizeActivityName(activity.Name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (topLevel.Length == 0)
+        {
+            return UiPathWorkflowStructureType.Unknown;
+        }
+
+        var hasSequence = topLevel.Any(name => name.Equals("Sequence", StringComparison.OrdinalIgnoreCase));
+        var hasFlowchart = topLevel.Any(name => name.Equals("Flowchart", StringComparison.OrdinalIgnoreCase));
+        var hasStateMachine = topLevel.Any(name => name.Contains("StateMachine", StringComparison.OrdinalIgnoreCase));
+        var structuralCount = new[] { hasSequence, hasFlowchart, hasStateMachine }.Count(value => value);
+
+        if (structuralCount > 1)
+        {
+            return UiPathWorkflowStructureType.Mixed;
+        }
+
+        if (hasSequence)
+        {
+            return UiPathWorkflowStructureType.Sequence;
+        }
+
+        if (hasFlowchart)
+        {
+            return UiPathWorkflowStructureType.Flowchart;
+        }
+
+        if (hasStateMachine)
+        {
+            return UiPathWorkflowStructureType.StateMachine;
+        }
+
+        return UiPathWorkflowStructureType.Unknown;
     }
 }

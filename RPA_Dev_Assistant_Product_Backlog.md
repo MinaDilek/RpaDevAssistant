@@ -61,18 +61,18 @@ Kurallar:
 - [ ] REFramework detaylı uygunluk analizi — Kısmi: REFramework detection var; detaylı compliance/checklist analizi yok.
 - [ ] Queue kullanım analizi
 - [ ] Config kullanım analizi
-- [ ] Flowchart tabanlı workflow’ları Sequence/standart workflow yapısına dönüştürme
-- [ ] Flowchart → Workflow dönüşüm önizlemesi
-- [ ] Flowchart dönüşümünde branch/decision mantığının korunması
+- [x] Flowchart tabanlı workflow’ları Sequence/standart workflow yapısına dönüştürme — Safe olarak sınıflanan root Flowchart workflow için controlled apply + backup + rollback; standalone XAML akışında ise orijinali değiştirmeden yeni Sequence dosyası olarak kaydetme destekleniyor.
+- [x] Flowchart → Workflow dönüşüm önizlemesi — Workflow detail ve bağımsız Flowchart Converter sayfasında destekleniyor.
+- [x] Flowchart dönüşümünde branch/decision mantığının korunması — FlowDecision, FlowSwitch ve shared continuation davranışı regression testleriyle korunuyor.
 
 ## 3. Dependency & Package Analysis
 
 - [x] Dependency/package analizi
-- [ ] Eski UiPath package tespiti
-- [ ] Uyumsuz package versiyonlarının tespiti
-- [ ] Kullanılmayan dependency tespiti
-- [ ] Modern / Classic activity uyumsuzluk analizi — Kısmi: legacy UI activity rule var; package/activity compatibility matrisi yok.
-- [ ] Package version risk analizi
+- [ ] Eski UiPath package tespiti — Kısmi: offline legacy package indicator var; güncel/deprecated package metadata kaynağı yok.
+- [x] Uyumsuz package versiyonlarının tespiti
+- [x] Kullanılmayan dependency tespiti
+- [x] Modern / Classic activity uyumsuzluk analizi
+- [ ] Package version risk analizi — Kısmi: declared-version alignment riski var; latest/vulnerability/deprecation kontrolü yok.
 
 ## 4. AI Features
 
@@ -100,8 +100,8 @@ Kurallar:
 - [x] DisplayName otomatik düzeltme
 - [ ] Workflow rename preview — Kısmi: RPA006 naming suggestion var; workflow rename diff/rename impact preview yok.
 - [ ] Workflow rename sırasında Invoke Workflow referanslarının güncellenmesi
-- [ ] Flowchart → Sequence dönüşüm preview
-- [ ] Flowchart → Sequence kontrollü dönüşüm
+- [x] Flowchart → Sequence dönüşüm preview — Workflow detail ve standalone XAML seçimi için doğrulandı.
+- [x] Flowchart → Sequence kontrollü dönüşüm — Safe conversion apply, stale hash kontrolü, backup/rollback ve standalone Save As akışıyla doğrulandı.
 - [ ] Refactoring önerileri — Kısmi: AI/manual fix suggestions genel refactoring önerisi üretebiliyor; ayrı refactoring motoru yok.
 
 ## 6. Localization & UX
@@ -153,13 +153,13 @@ Kurallar:
 
 ## 9. Analysis History
 
-- [ ] Analysis history
-- [ ] Önceki analizle karşılaştırma
-- [ ] Skor değişim geçmişi
-- [ ] Yeni finding tespiti
-- [ ] Kapanan finding tespiti
-- [ ] Değişmeyen finding tespiti
-- [ ] Workflow bazlı değişim geçmişi
+- [x] Analysis history
+- [x] Önceki analizle karşılaştırma
+- [x] Skor değişim geçmişi
+- [x] Yeni finding tespiti
+- [x] Kapanan finding tespiti
+- [x] Değişmeyen finding tespiti
+- [x] Workflow bazlı değişim geçmişi
 - [ ] Trend analizi
 
 ## 10. UiPath Integration

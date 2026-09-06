@@ -48,6 +48,46 @@ describe('reportViewModel', () => {
     expect(getComplexityDistribution(analysis)).toEqual({ Low: 1, High: 1, VeryHigh: 1 });
     expect(getTopComplexWorkflows(analysis, 2).map((workflow) => workflow.relativePath)).toEqual(['C.xaml', 'B.xaml']);
   });
+
+  it('prefers backend workflow complexity summary when available', () => {
+    const analysis: AnalysisResponse = {
+      complexitySummary: {
+        totalWorkflowCount: 4,
+        lowCount: 1,
+        mediumCount: 1,
+        highCount: 1,
+        veryHighCount: 1,
+        topComplexWorkflows: [
+          {
+            workflowPath: 'Framework/Process.xaml',
+            complexityScore: 180,
+            complexityLevel: 'VeryHigh',
+            executableActivityCount: 140,
+            maxNestingDepth: 12,
+          },
+        ],
+      },
+      workflows: [
+        { relativePath: 'A.xaml', activityCount: 3, complexity: { complexityScore: 20, complexityLevel: 'Low' } },
+      ],
+    };
+
+    expect(getComplexityDistribution(analysis)).toEqual({ Low: 1, Medium: 1, High: 1, VeryHigh: 1 });
+    expect(getTopComplexWorkflows(analysis, 5)).toEqual([
+      {
+        relativePath: 'Framework/Process.xaml',
+        complexity: {
+          workflowPath: 'Framework/Process.xaml',
+          complexityScore: 180,
+          complexityLevel: 'VeryHigh',
+          executableActivities: 140,
+          executableActivityCount: 140,
+          maxNestingDepth: 12,
+        },
+        workflow: undefined,
+      },
+    ]);
+  });
 });
 
 function finding(ruleId: string, severity: string, workflowPath = 'Main.xaml'): Finding {

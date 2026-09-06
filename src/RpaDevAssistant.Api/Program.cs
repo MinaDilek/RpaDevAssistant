@@ -8,6 +8,8 @@ using RpaDevAssistant.Core.Analysis.RuleCatalog;
 using RpaDevAssistant.Core.Analysis.Rules;
 using RpaDevAssistant.Core.Analysis.Scoring;
 using RpaDevAssistant.Core.Dependencies;
+using RpaDevAssistant.Core.Flowcharts;
+using RpaDevAssistant.Core.History;
 using RpaDevAssistant.Core.Scanning;
 using RpaDevAssistant.Core.Parsing;
 using RpaDevAssistant.Core.Reporting;
@@ -43,6 +45,10 @@ builder.Services.AddSingleton<IUiPathSelectorAnalyzer, UiPathSelectorAnalyzer>()
 builder.Services.AddSingleton<IUiPathWorkflowMetricsCalculator, UiPathWorkflowMetricsCalculator>();
 builder.Services.AddSingleton<IUiPathPackageActivityMapper, UiPathPackageActivityMapper>();
 builder.Services.AddSingleton<IUiPathDependencyAnalyzer, UiPathDependencyAnalyzer>();
+builder.Services.AddSingleton<IUiPathFlowchartAnalyzer, UiPathFlowchartAnalyzer>();
+builder.Services.AddSingleton<IUiPathFlowchartConversionService, UiPathFlowchartConversionService>();
+builder.Services.AddSingleton<IUiPathFlowchartConversionApplyService, UiPathFlowchartConversionApplyService>();
+builder.Services.AddSingleton<IUiPathStandaloneFlowchartConverter, UiPathStandaloneFlowchartConverter>();
 builder.Services.AddSingleton<IRpaDevAssistantLocalizer, RpaDevAssistantLocalizer>();
 builder.Services.AddSingleton<UiPathAnalysisFindingLocalizer>();
 builder.Services.AddSingleton<UiPathFixSuggestionLocalizer>();
@@ -94,6 +100,7 @@ builder.Services.AddSingleton<IUiPathAnalysisReportBuilder, UiPathAnalysisReport
 builder.Services.AddSingleton<IUiPathAnalysisReportService, UiPathAnalysisReportService>();
 builder.Services.AddSingleton<IUiPathReportExporter, JsonUiPathReportExporter>();
 builder.Services.AddSingleton<IUiPathReportExporter, HtmlUiPathReportExporter>();
+builder.Services.AddSingleton<IUiPathReportExporter, PdfUiPathReportExporter>();
 builder.Services.AddSingleton<IUiPathReportExportService, UiPathReportExportService>();
 builder.Services.AddSingleton<ISecretRedactor, SensitiveValueRedactor>();
 builder.Services.AddSingleton(_ => new UiPathAiReviewOptions());
@@ -140,6 +147,8 @@ builder.Services.AddSingleton<IUiPathBackupRepository, UiPathBackupRepository>()
 builder.Services.AddSingleton<IUiPathRestoreAuditLogger, UiPathRestoreAuditLogger>();
 builder.Services.AddSingleton<IUiPathBackupRestoreService, UiPathBackupRestoreService>();
 builder.Services.AddSingleton<IUiPathUndoService, UiPathUndoService>();
+builder.Services.AddSingleton(new UiPathAnalysisHistoryOptions());
+builder.Services.AddSingleton<IUiPathAnalysisHistoryService, UiPathAnalysisHistoryService>();
 
 var app = builder.Build();
 

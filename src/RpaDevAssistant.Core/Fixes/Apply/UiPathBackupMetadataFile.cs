@@ -15,4 +15,8 @@ public sealed record UiPathBackupMetadataFile
     public string? PreviousValue { get; init; }
 
     public string? NewValue { get; init; }
+
+    public string? OperationType { get; init; }
+
+    public string? ConversionPlanVersion { get; init; }
 }

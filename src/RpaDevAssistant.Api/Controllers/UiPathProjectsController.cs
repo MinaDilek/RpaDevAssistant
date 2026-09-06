@@ -11,6 +11,7 @@ using System.Text;
 using RpaDevAssistant.Core.ProjectAssistant;
 using RpaDevAssistant.Core.Fixes;
 using RpaDevAssistant.Core.Fixes.Apply;
+using RpaDevAssistant.Core.History;
 using RpaDevAssistant.Core.Localization;
 
 namespace RpaDevAssistant.Api.Controllers;
@@ -31,6 +32,7 @@ public sealed class UiPathProjectsController : ControllerBase
     private readonly IUiPathBackupRepository backupRepository;
     private readonly IUiPathUndoService undoService;
     private readonly UiPathAnalysisFindingLocalizer findingLocalizer;
+    private readonly IUiPathAnalysisHistoryService analysisHistoryService;
 
     public UiPathProjectsController(
         IUiPathProjectScanner scanner,
@@ -44,7 +46,8 @@ public sealed class UiPathProjectsController : ControllerBase
         IUiPathFixApplier fixApplier,
         IUiPathBackupRepository backupRepository,
         IUiPathUndoService undoService,
-        UiPathAnalysisFindingLocalizer findingLocalizer)
+        UiPathAnalysisFindingLocalizer findingLocalizer,
+        IUiPathAnalysisHistoryService analysisHistoryService)
     {
         this.scanner = scanner;
         this.analyzer = analyzer;
@@ -58,6 +61,45 @@ public sealed class UiPathProjectsController : ControllerBase
         this.backupRepository = backupRepository;
         this.undoService = undoService;
         this.findingLocalizer = findingLocalizer;
+        this.analysisHistoryService = analysisHistoryService;
+    }
+
+    [HttpGet("analysis-history")]
+    public IActionResult AnalysisHistory([FromQuery] string? projectPath)
+    {
+        if (string.IsNullOrWhiteSpace(projectPath))
+        {
+            return Ok(analysisHistoryService.ListSnapshots());
+        }
+
+        if (ContainsInvalidPathCharacters(projectPath))
+        {
+            return BadRequest(new { error = "projectPath contains invalid path characters." });
+        }
+
+        return Ok(analysisHistoryService.ListSnapshots(projectPath));
+    }
+
+    [HttpPost("analysis-history/compare")]
+    public IActionResult CompareAnalysisSnapshots([FromBody] CompareAnalysisSnapshotsRequest request)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.ProjectPath))
+        {
+            return BadRequest(new { error = "projectPath is required." });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.BaselineSnapshotId) || string.IsNullOrWhiteSpace(request.TargetSnapshotId))
+        {
+            return BadRequest(new { error = "baselineSnapshotId and targetSnapshotId are required." });
+        }
+
+        if (ContainsInvalidPathCharacters(request.ProjectPath))
+        {
+            return BadRequest(new { error = "projectPath contains invalid path characters." });
+        }
+
+        var comparison = analysisHistoryService.Compare(request.ProjectPath, request.BaselineSnapshotId, request.TargetSnapshotId);
+        return comparison is null ? NotFound(new { error = "Analysis snapshot comparison could not be created." }) : Ok(comparison);
     }
 
     [HttpGet("backups")]
@@ -356,7 +398,17 @@ public sealed class UiPathProjectsController : ControllerBase
         try
         {
             var result = analyzer.Analyze(request.ProjectPath, request.ProfileId);
-            return Ok(AnalyzeUiPathProjectResponse.From(result, findingLocalizer, request.Locale));
+            UiPathAnalysisSnapshotSaveResult? snapshot = null;
+            try
+            {
+                snapshot = analysisHistoryService.SaveSnapshot(result);
+            }
+            catch
+            {
+                // Local history is useful but must not break the primary analysis flow.
+            }
+
+            return Ok(AnalyzeUiPathProjectResponse.From(result, findingLocalizer, request.Locale, snapshot));
         }
         catch (UnknownRuleProfileException ex)
         {
@@ -379,7 +431,7 @@ public sealed class UiPathProjectsController : ControllerBase
 
         if (!TryParseFormat(request.Format, out var format))
         {
-            return BadRequest(new { error = "format must be either json or html." });
+            return BadRequest(new { error = "format must be json, html, or pdf." });
         }
 
         try

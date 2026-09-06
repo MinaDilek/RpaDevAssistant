@@ -28,7 +28,7 @@ describe('getFixSuggestion', () => {
     expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:5000/api/uipath/projects/fix-suggestions', expect.objectContaining({
       method: 'POST',
     }));
-    const request = (fetchMock as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0][1];
+    const request = findRequest(fetchMock, '/api/uipath/projects/fix-suggestions');
     expect(JSON.parse(String(request.body))).toMatchObject({
       ruleId: 'RPA007',
       activityId: 'a1',
@@ -152,3 +152,13 @@ describe('getFixSuggestion', () => {
     })).rejects.toThrow('workflow has changed');
   });
 });
+
+function findRequest(fetchMock: ReturnType<typeof vi.fn>, path: string): RequestInit {
+  const call = (fetchMock as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls
+    .find(([url]) => String(url).includes(path));
+  if (!call) {
+    throw new Error(`Expected request to ${path}.`);
+  }
+
+  return call[1];
+}

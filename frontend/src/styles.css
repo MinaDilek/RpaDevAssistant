@@ -952,6 +952,11 @@ button:disabled {
   color: #334155;
 }
 
+.conversion-unavailable {
+  border-left-color: #f59e0b;
+  background: #fffbeb;
+}
+
 .high-risk {
   border-left-color: #dc2626;
   background: #fef2f2;
@@ -1234,6 +1239,48 @@ tr:last-child td {
   border-radius: 8px;
 }
 
+.conversion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.conversion-actions button {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.conversion-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.conversion-apply-panel {
+  background: var(--panel-muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.before-after-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.before-after-grid section {
+  margin: 0;
+}
+
+.compact-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
 @media (max-width: 960px) {
   body {
     min-width: 0;
@@ -1270,7 +1317,8 @@ tr:last-child td {
   .project-grid,
   .path-row,
   .split-layout,
-  .builder-grid {
+  .builder-grid,
+  .before-after-grid {
     grid-template-columns: 1fr;
   }
 

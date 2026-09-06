@@ -30,7 +30,7 @@ describe('askProject', () => {
     expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:5000/api/uipath/projects/ask', expect.objectContaining({
       method: 'POST',
     }));
-    const request = (fetchMock as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0][1];
+    const request = findRequest(fetchMock, '/api/uipath/projects/ask');
     expect(JSON.parse(String(request.body))).toMatchObject({
       preferredWorkflowPath: 'Main.xaml',
       question: 'Main.xaml ne yapıyor?',
@@ -61,3 +61,13 @@ describe('askProject', () => {
     await expect(askProject({ projectPath: '/tmp/project', question: '' })).rejects.toThrow('question is required');
   });
 });
+
+function findRequest(fetchMock: ReturnType<typeof vi.fn>, path: string): RequestInit {
+  const call = (fetchMock as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls
+    .find(([url]) => String(url).includes(path));
+  if (!call) {
+    throw new Error(`Expected request to ${path}.`);
+  }
+
+  return call[1];
+}

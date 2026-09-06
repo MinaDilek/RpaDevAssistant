@@ -1,6 +1,8 @@
 using RpaDevAssistant.Core.Analysis;
 using RpaDevAssistant.Core.Analysis.Scoring;
 using RpaDevAssistant.Core.Dependencies;
+using RpaDevAssistant.Core.Flowcharts;
+using RpaDevAssistant.Core.History;
 using RpaDevAssistant.Core.Localization;
 
 namespace RpaDevAssistant.Api.Responses;
@@ -23,6 +25,14 @@ public sealed record AnalyzeUiPathProjectResponse
 
     public UiPathDependencySummary? DependencyAnalysis { get; init; }
 
+    public UiPathFlowchartAnalysisSummary? FlowchartAnalysis { get; init; }
+
+    public UiPathWorkflowComplexitySummary ComplexitySummary { get; init; } = new();
+
+    public UiPathAnalysisSnapshotSummary? AnalysisSnapshot { get; init; }
+
+    public UiPathAnalysisComparison? ComparisonWithPrevious { get; init; }
+
     public IReadOnlyList<AnalyzeWorkflowSummaryResponse> Workflows { get; init; } = [];
 
     public IReadOnlyList<string> Errors { get; init; } = [];
@@ -31,7 +41,11 @@ public sealed record AnalyzeUiPathProjectResponse
 
     public string Locale { get; init; } = "en";
 
-    public static AnalyzeUiPathProjectResponse From(UiPathProjectAnalysisResult result, UiPathAnalysisFindingLocalizer? findingLocalizer = null, string? locale = null)
+    public static AnalyzeUiPathProjectResponse From(
+        UiPathProjectAnalysisResult result,
+        UiPathAnalysisFindingLocalizer? findingLocalizer = null,
+        string? locale = null,
+        UiPathAnalysisSnapshotSaveResult? snapshotSaveResult = null)
     {
         var responseLocale = SupportedLocale.Normalize(locale);
         var analysis = findingLocalizer is null ? result.Analysis : findingLocalizer.Localize(result.Analysis, responseLocale);
@@ -46,6 +60,25 @@ public sealed record AnalyzeUiPathProjectResponse
             Analysis = analysis,
             QualityScore = result.QualityScore,
             DependencyAnalysis = result.ProjectScan.DependencyAnalysis,
+            FlowchartAnalysis = result.ProjectScan.FlowchartAnalysis,
+            ComplexitySummary = result.ProjectScan.ComplexitySummary,
+            AnalysisSnapshot = snapshotSaveResult is null ? null : new UiPathAnalysisSnapshotSummary
+            {
+                SnapshotId = snapshotSaveResult.Snapshot.SnapshotId,
+                GeneratedAtUtc = snapshotSaveResult.Snapshot.GeneratedAtUtc,
+                ProjectName = snapshotSaveResult.Snapshot.ProjectName,
+                Score = snapshotSaveResult.Snapshot.Score,
+                Grade = snapshotSaveResult.Snapshot.Grade,
+                WorkflowCount = snapshotSaveResult.Snapshot.WorkflowCount,
+                TotalActivityCount = snapshotSaveResult.Snapshot.TotalActivityCount,
+                TotalFindings = snapshotSaveResult.Snapshot.FindingSummary.Total,
+                PreviousSnapshotId = snapshotSaveResult.ComparisonWithPrevious?.BaselineSnapshotId,
+                ScoreDelta = snapshotSaveResult.ComparisonWithPrevious?.ScoreDelta,
+                TotalFindingDelta = snapshotSaveResult.ComparisonWithPrevious?.TotalFindingDelta,
+                NewFindingCount = snapshotSaveResult.ComparisonWithPrevious?.NewFindings.Count,
+                ResolvedFindingCount = snapshotSaveResult.ComparisonWithPrevious?.ResolvedFindings.Count
+            },
+            ComparisonWithPrevious = snapshotSaveResult?.ComparisonWithPrevious,
             Workflows = result.ProjectScan.Workflows.Select(AnalyzeWorkflowSummaryResponse.From).ToArray(),
             Errors = result.ProjectScan.Errors,
             Warnings = result.ProjectScan.Warnings,

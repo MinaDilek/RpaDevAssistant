@@ -1,6 +1,7 @@
 using System.Text.Json;
 using RpaDevAssistant.Core.Analysis;
 using RpaDevAssistant.Core.Dependencies;
+using RpaDevAssistant.Core.Flowcharts;
 using RpaDevAssistant.Core.Models;
 using RpaDevAssistant.Core.Parsing;
 
@@ -22,25 +23,28 @@ public sealed class UiPathProjectScanner : IUiPathProjectScanner
     private readonly IUiPathXamlParser xamlParser;
     private readonly IUiPathWorkflowMetricsCalculator metricsCalculator;
     private readonly IUiPathDependencyAnalyzer dependencyAnalyzer;
+    private readonly IUiPathFlowchartAnalyzer flowchartAnalyzer;
 
     public UiPathProjectScanner()
-        : this(new UiPathXamlParser(), new UiPathWorkflowMetricsCalculator(), new UiPathDependencyAnalyzer())
+        : this(new UiPathXamlParser(), new UiPathWorkflowMetricsCalculator(), new UiPathDependencyAnalyzer(), new UiPathFlowchartAnalyzer())
     {
     }
 
     public UiPathProjectScanner(IUiPathXamlParser xamlParser)
-        : this(xamlParser, new UiPathWorkflowMetricsCalculator(), new UiPathDependencyAnalyzer())
+        : this(xamlParser, new UiPathWorkflowMetricsCalculator(), new UiPathDependencyAnalyzer(), new UiPathFlowchartAnalyzer())
     {
     }
 
     public UiPathProjectScanner(
         IUiPathXamlParser xamlParser,
         IUiPathWorkflowMetricsCalculator metricsCalculator,
-        IUiPathDependencyAnalyzer? dependencyAnalyzer = null)
+        IUiPathDependencyAnalyzer? dependencyAnalyzer = null,
+        IUiPathFlowchartAnalyzer? flowchartAnalyzer = null)
     {
         this.xamlParser = xamlParser;
         this.metricsCalculator = metricsCalculator;
         this.dependencyAnalyzer = dependencyAnalyzer ?? new UiPathDependencyAnalyzer();
+        this.flowchartAnalyzer = flowchartAnalyzer ?? new UiPathFlowchartAnalyzer();
     }
 
     public ProjectScanResult Scan(string projectPath)
@@ -64,6 +68,7 @@ public sealed class UiPathProjectScanner : IUiPathProjectScanner
         ScanProjectJson(normalizedProjectPath, result);
         ScanWorkflows(normalizedProjectPath, result);
         result.DependencyAnalysis = dependencyAnalyzer.Analyze(result);
+        result.FlowchartAnalysis = flowchartAnalyzer.AnalyzeProject(result);
         ScanFolders(normalizedProjectPath, result);
         DetectReFramework(result);
 

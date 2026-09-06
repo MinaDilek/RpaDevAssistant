@@ -1,6 +1,7 @@
 namespace RpaDevAssistant.Core.Reporting;
 
 using RpaDevAssistant.Core.Dependencies;
+using RpaDevAssistant.Core.Flowcharts;
 
 public sealed record UiPathAnalysisReport
 {
@@ -47,4 +48,6 @@ public sealed record UiPathAnalysisReport
     public IReadOnlyList<UiPathReportWorkflowComplexity> TopComplexWorkflows { get; init; } = [];
 
     public UiPathDependencySummary? DependencyAnalysis { get; init; }
+
+    public UiPathFlowchartAnalysisSummary? FlowchartAnalysis { get; init; }
 }

@@ -2,8 +2,14 @@ import { invoke } from '@tauri-apps/api/core';
 import { isTauriDesktop } from './environment';
 
 const DEFAULT_BROWSER_API_BASE_URL = 'http://127.0.0.1:5000';
+const BROWSER_DEV_API_BASE_URLS = [
+  DEFAULT_BROWSER_API_BASE_URL,
+  'http://127.0.0.1:5186',
+  'http://127.0.0.1:5187',
+];
 
 let cachedDesktopBackendUrl: string | null = null;
+let cachedBrowserBackendUrl: string | null = null;
 let currentLocale: 'tr' | 'en' = 'en';
 
 export function setApiLocale(locale: 'tr' | 'en'): void {
@@ -12,6 +18,11 @@ export function setApiLocale(locale: 'tr' | 'en'): void {
 
 export function getApiLocale(): 'tr' | 'en' {
   return currentLocale;
+}
+
+export function resetApiClientCacheForTests(): void {
+  cachedDesktopBackendUrl = null;
+  cachedBrowserBackendUrl = null;
 }
 
 function withLocale<T extends Record<string, unknown>>(input: T): T & { locale: 'tr' | 'en' } {
@@ -27,6 +38,12 @@ export async function getBackendBaseUrl(): Promise<string> {
   if (isTauriDesktop()) {
     cachedDesktopBackendUrl ??= trimTrailingSlash(await invoke<string>('backend_base_url'));
     return cachedDesktopBackendUrl;
+  }
+
+  const discoveredBrowserBackendUrl = cachedBrowserBackendUrl ?? await resolveBrowserBackendUrl();
+  if (discoveredBrowserBackendUrl) {
+    cachedBrowserBackendUrl = discoveredBrowserBackendUrl;
+    return discoveredBrowserBackendUrl;
   }
 
   return DEFAULT_BROWSER_API_BASE_URL;
@@ -48,6 +65,31 @@ export async function checkHealth(maxAttempts = 20, delayMs = 250): Promise<bool
   }
 
   return false;
+}
+
+async function resolveBrowserBackendUrl(): Promise<string | null> {
+  for (const baseUrl of BROWSER_DEV_API_BASE_URLS) {
+    if (await canReachHealthEndpoint(baseUrl)) {
+      return baseUrl;
+    }
+  }
+
+  return null;
+}
+
+async function canReachHealthEndpoint(baseUrl: string): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 350);
+    try {
+      const response = await fetch(`${baseUrl}/api/health`, { signal: controller.signal });
+      return response.ok;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  } catch {
+    return false;
+  }
 }
 
 export async function analyzeProject(projectPath: string, profileId = 'default'): Promise<unknown> {
@@ -199,6 +241,46 @@ export async function listBackups(projectPath: string): Promise<unknown> {
   return result;
 }
 
+export async function listAnalysisHistory(projectPath?: string): Promise<unknown> {
+  const baseUrl = await getBackendBaseUrl();
+  const query = projectPath ? `?projectPath=${encodeURIComponent(projectPath)}` : '';
+  const response = await fetch(`${baseUrl}/api/uipath/projects/analysis-history${query}`);
+  const result = await response.json();
+  if (!response.ok) {
+    const message = typeof result?.error === 'string'
+      ? result.error
+      : `Analysis history request failed with HTTP ${response.status}.`;
+    throw new Error(message);
+  }
+
+  return result;
+}
+
+export async function compareAnalysisSnapshots(input: {
+  projectPath: string;
+  baselineSnapshotId: string;
+  targetSnapshotId: string;
+}): Promise<unknown> {
+  const baseUrl = await getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/api/uipath/projects/analysis-history/compare`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+
+  const result = await response.json();
+  if (!response.ok) {
+    const message = typeof result?.error === 'string'
+      ? result.error
+      : `Analysis comparison request failed with HTTP ${response.status}.`;
+    throw new Error(message);
+  }
+
+  return result;
+}
+
 export async function undoFix(input: {
   projectPath: string;
   backupId: string;
@@ -222,6 +304,143 @@ export async function undoFix(input: {
       : typeof result?.error === 'string'
         ? result.error
         : `Undo request failed with HTTP ${response.status}.`;
+    throw new Error(message);
+  }
+
+  return result;
+}
+
+export async function analyzeFlowchartConversion(input: {
+  projectPath: string;
+  workflowPath: string;
+}): Promise<unknown> {
+  const baseUrl = await getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/api/uipath/workflows/flowchart-conversion/analyze`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+
+  const result = await response.json();
+  if (!response.ok) {
+    const message = typeof result?.errors?.[0] === 'string'
+      ? result.errors[0]
+      : typeof result?.error === 'string'
+        ? result.error
+        : `Flowchart conversion analysis failed with HTTP ${response.status}.`;
+    throw new Error(message);
+  }
+
+  return result;
+}
+
+export async function applyFlowchartConversion(input: {
+  projectPath: string;
+  workflowPath: string;
+  expectedWorkflowHash?: string | null;
+  confirmed: boolean;
+  createBackup?: boolean;
+}): Promise<unknown> {
+  const baseUrl = await getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/api/uipath/workflows/flowchart-conversion/apply`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+
+  const result = await response.json();
+  if (!response.ok) {
+    const message = typeof result?.message === 'string'
+      ? result.message
+      : typeof result?.error === 'string'
+        ? result.error
+        : `Flowchart conversion apply failed with HTTP ${response.status}.`;
+    throw new Error(message);
+  }
+
+  return result;
+}
+
+export async function rollbackFlowchartConversion(input: {
+  projectPath: string;
+  workflowPath: string;
+  backupId: string;
+  expectedCurrentHash?: string | null;
+  createSafetyBackup?: boolean;
+}): Promise<unknown> {
+  const baseUrl = await getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/api/uipath/workflows/flowchart-conversion/rollback`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+
+  const result = await response.json();
+  if (!response.ok) {
+    const message = typeof result?.message === 'string'
+      ? result.message
+      : typeof result?.error === 'string'
+        ? result.error
+        : `Flowchart conversion rollback failed with HTTP ${response.status}.`;
+    throw new Error(message);
+  }
+
+  return result;
+}
+
+export async function analyzeStandaloneFlowchart(input: {
+  xamlFilePath: string;
+}): Promise<unknown> {
+  const baseUrl = await getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/api/uipath/workflows/flowchart-conversion/standalone/analyze`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+
+  const result = await response.json();
+  if (!response.ok) {
+    const message = typeof result?.errors?.[0] === 'string'
+      ? result.errors[0]
+      : typeof result?.error === 'string'
+        ? result.error
+        : `Standalone Flowchart analysis failed with HTTP ${response.status}.`;
+    throw new Error(message);
+  }
+
+  return result;
+}
+
+export async function convertStandaloneFlowchart(input: {
+  xamlFilePath: string;
+  outputPath: string;
+  expectedWorkflowHash?: string | null;
+  confirmed: boolean;
+}): Promise<unknown> {
+  const baseUrl = await getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/api/uipath/workflows/flowchart-conversion/standalone/convert`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+
+  const result = await response.json();
+  if (!response.ok) {
+    const message = typeof result?.message === 'string'
+      ? result.message
+      : typeof result?.error === 'string'
+        ? result.error
+        : `Standalone Flowchart conversion failed with HTTP ${response.status}.`;
     throw new Error(message);
   }
 

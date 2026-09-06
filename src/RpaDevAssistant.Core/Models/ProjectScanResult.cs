@@ -1,6 +1,8 @@
 namespace RpaDevAssistant.Core.Models;
 
+using RpaDevAssistant.Core.Analysis;
 using RpaDevAssistant.Core.Dependencies;
+using RpaDevAssistant.Core.Flowcharts;
 
 public sealed class ProjectScanResult
 {
@@ -24,6 +26,40 @@ public sealed class ProjectScanResult
         .GroupBy(complexity => complexity!.ComplexityLevel.ToString(), StringComparer.OrdinalIgnoreCase)
         .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
         .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+
+    public UiPathWorkflowComplexitySummary ComplexitySummary
+    {
+        get
+        {
+            var complexities = Workflows
+                .Select(workflow => workflow.Analysis?.Complexity)
+                .Where(complexity => complexity is not null)
+                .Cast<UiPathWorkflowComplexity>()
+                .ToArray();
+
+            return new UiPathWorkflowComplexitySummary
+            {
+                TotalWorkflowCount = Workflows.Count,
+                LowCount = complexities.Count(complexity => complexity.ComplexityLevel == UiPathWorkflowComplexityLevel.Low),
+                MediumCount = complexities.Count(complexity => complexity.ComplexityLevel == UiPathWorkflowComplexityLevel.Medium),
+                HighCount = complexities.Count(complexity => complexity.ComplexityLevel == UiPathWorkflowComplexityLevel.High),
+                VeryHighCount = complexities.Count(complexity => complexity.ComplexityLevel == UiPathWorkflowComplexityLevel.VeryHigh),
+                TopComplexWorkflows = complexities
+                    .OrderByDescending(complexity => complexity.ComplexityScore)
+                    .ThenBy(complexity => complexity.WorkflowPath, StringComparer.OrdinalIgnoreCase)
+                    .Take(5)
+                    .Select(complexity => new UiPathTopComplexWorkflow
+                    {
+                        WorkflowPath = complexity.WorkflowPath,
+                        ComplexityScore = complexity.ComplexityScore,
+                        ComplexityLevel = complexity.ComplexityLevel,
+                        ExecutableActivityCount = complexity.ExecutableActivityCount,
+                        MaxNestingDepth = complexity.MaxNestingDepth
+                    })
+                    .ToArray()
+            };
+        }
+    }
 
     public IReadOnlyList<RpaDevAssistant.Core.Analysis.UiPathWorkflowComplexity> TopComplexWorkflows => Workflows
         .Select(workflow => workflow.Analysis?.Complexity)
@@ -50,6 +86,8 @@ public sealed class ProjectScanResult
     public List<UiPathDependency> Dependencies { get; } = [];
 
     public UiPathDependencySummary? DependencyAnalysis { get; set; }
+
+    public UiPathFlowchartAnalysisSummary? FlowchartAnalysis { get; set; }
 
     public List<UiPathFolderInfo> Folders { get; } = [];
 

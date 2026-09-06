@@ -48,9 +48,10 @@ public sealed class HtmlUiPathReportExporter : IUiPathReportExporter
         html.AppendLine($"<p>{Encode(L(localizer, locale, "Reports.GeneratedAt"))} {Encode(report.GeneratedAtUtc.ToString("O"))} UTC · {Encode(L(localizer, locale, "Reports.ProductVersion"))} {Encode(report.ProductVersion)} · {Encode(L(localizer, locale, "Reports.Schema"))} {Encode(report.SchemaVersion)}</p>");
         html.AppendLine("</header>");
         html.AppendLine("<main>");
-        html.AppendLine($"<nav class=\"nav\"><a href=\"#summary\">{Encode(L(localizer, locale, "Reports.Summary"))}</a><a href=\"#dependencies\">{Encode(L(localizer, locale, "Reports.DependencyAnalysis"))}</a><a href=\"#findings\">{Encode(L(localizer, locale, "Reports.Findings"))}</a><a href=\"#complexity\">{Encode(L(localizer, locale, "Reports.Complexity"))}</a><a href=\"#workflows\">{Encode(L(localizer, locale, "Reports.Workflows"))}</a><a href=\"#score-breakdown\">{Encode(L(localizer, locale, "Reports.ScoreBreakdown"))}</a></nav>");
+        html.AppendLine($"<nav class=\"nav\"><a href=\"#summary\">{Encode(L(localizer, locale, "Reports.Summary"))}</a><a href=\"#dependencies\">{Encode(L(localizer, locale, "Reports.DependencyAnalysis"))}</a><a href=\"#flowcharts\">{Encode(L(localizer, locale, "Reports.FlowchartAnalysis"))}</a><a href=\"#findings\">{Encode(L(localizer, locale, "Reports.Findings"))}</a><a href=\"#complexity\">{Encode(L(localizer, locale, "Reports.Complexity"))}</a><a href=\"#workflows\">{Encode(L(localizer, locale, "Reports.Workflows"))}</a><a href=\"#score-breakdown\">{Encode(L(localizer, locale, "Reports.ScoreBreakdown"))}</a></nav>");
         AppendSummary(html, report, locale, localizer);
         AppendDependencies(html, report, locale, localizer);
+        AppendFlowcharts(html, report, locale, localizer);
         AppendFindings(html, report, locale, localizer);
         AppendComplexity(html, report, locale, localizer);
         AppendWorkflows(html, report, locale, localizer);
@@ -113,8 +114,54 @@ public sealed class HtmlUiPathReportExporter : IUiPathReportExporter
         html.AppendLine($"<table><thead><tr><th>{Encode(L(localizer, locale, "Reports.Package"))}</th><th>{Encode(L(localizer, locale, "Reports.Version"))}</th><th>{Encode(L(localizer, locale, "Reports.Category"))}</th><th>{Encode(L(localizer, locale, "Reports.Usage"))}</th><th>{Encode(L(localizer, locale, "Reports.Risk"))}</th><th>{Encode(L(localizer, locale, "Reports.UsedByWorkflows"))}</th><th>{Encode(L(localizer, locale, "Reports.Notes"))}</th></tr></thead><tbody>");
         foreach (var package in report.DependencyAnalysis.Packages)
         {
-            var notes = package.Findings.Count > 0 ? string.Join("; ", package.Findings) : package.Notes;
+            var notes = LocalizeDependencyNotes(package, locale, localizer);
             html.AppendLine($"<tr><td>{Encode(package.Name)}</td><td>{Encode(package.DeclaredVersion ?? string.Empty)}</td><td>{Encode(package.Category.ToString())}</td><td>{Encode(package.UsageStatus.ToString())}</td><td>{Encode(package.RiskLevel.ToString())}</td><td>{Encode(string.Join(", ", package.UsedByWorkflows.Take(5)))}</td><td>{Encode(notes ?? string.Empty)}</td></tr>");
+        }
+
+        html.AppendLine("</tbody></table>");
+        html.AppendLine("</section>");
+    }
+
+    private static void AppendFlowcharts(StringBuilder html, UiPathAnalysisReport report, string locale, IRpaDevAssistantLocalizer localizer)
+    {
+        html.AppendLine("<section id=\"flowcharts\">");
+        html.AppendLine($"<h2>{Encode(L(localizer, locale, "Reports.FlowchartAnalysis"))}</h2>");
+        if (report.FlowchartAnalysis is null)
+        {
+            html.AppendLine($"<p>{Encode(L(localizer, locale, "Reports.NoFlowchartAnalysis"))}</p>");
+            html.AppendLine("</section>");
+            return;
+        }
+
+        html.AppendLine("<div class=\"grid\">");
+        AppendMetric(html, L(localizer, locale, "Reports.FlowchartWorkflows"), report.FlowchartAnalysis.FlowchartWorkflowCount.ToString());
+        AppendMetric(html, "Root Flowchart", report.FlowchartAnalysis.RootFlowchartWorkflowCount.ToString());
+        AppendMetric(html, "Nested Flowchart", report.FlowchartAnalysis.NestedFlowchartWorkflowCount.ToString());
+        AppendMetric(html, "Total Flowchart", report.FlowchartAnalysis.TotalFlowchartCount.ToString());
+        AppendMetric(html, "Sequence", report.FlowchartAnalysis.SequenceWorkflowCount.ToString());
+        AppendMetric(html, "State Machine", report.FlowchartAnalysis.StateMachineWorkflowCount.ToString());
+        AppendMetric(html, "Mixed", report.FlowchartAnalysis.MixedWorkflowCount.ToString());
+        AppendMetric(html, L(localizer, locale, "Reports.SafeConversions"), report.FlowchartAnalysis.SafeConversionCount.ToString());
+        AppendMetric(html, L(localizer, locale, "Reports.RequiresReview"), report.FlowchartAnalysis.RequiresReviewCount.ToString());
+        AppendMetric(html, L(localizer, locale, "Reports.Complex"), report.FlowchartAnalysis.ComplexCount.ToString());
+        AppendMetric(html, L(localizer, locale, "Reports.NotSupported"), report.FlowchartAnalysis.NotSupportedCount.ToString());
+        html.AppendLine("</div>");
+
+        var flowcharts = report.FlowchartAnalysis.Workflows
+            .Where(workflow => workflow.ContainsFlowchart)
+            .OrderBy(workflow => workflow.WorkflowPath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (flowcharts.Length == 0)
+        {
+            html.AppendLine($"<p>{Encode(L(localizer, locale, "Reports.NoFlowchartWorkflows"))}</p>");
+            html.AppendLine("</section>");
+            return;
+        }
+
+        html.AppendLine($"<table><thead><tr><th>{Encode(L(localizer, locale, "Reports.Workflow"))}</th><th>{Encode(L(localizer, locale, "Reports.Structure"))}</th><th>{Encode(L(localizer, locale, "Reports.Nodes"))}</th><th>{Encode(L(localizer, locale, "Reports.DecisionCount"))}</th><th>{Encode(L(localizer, locale, "Reports.Switches"))}</th><th>{Encode(L(localizer, locale, "Reports.Cycles"))}</th><th>{Encode(L(localizer, locale, "Reports.Convertibility"))}</th><th>{Encode(L(localizer, locale, "Reports.Confidence"))}</th></tr></thead><tbody>");
+        foreach (var workflow in flowcharts)
+        {
+            html.AppendLine($"<tr><td>{Encode(workflow.WorkflowPath)}</td><td>{Encode(workflow.IsRootFlowchart ? workflow.StructureType.ToString() : $"{workflow.StructureType} + Flowchart")}</td><td>{workflow.NodeCount}</td><td>{workflow.DecisionCount}</td><td>{workflow.SwitchCount}</td><td>{Encode(workflow.HasCycles ? L(localizer, locale, "Reports.Yes") : L(localizer, locale, "Reports.No"))}</td><td>{Encode(LocalizeFlowchartLevel(localizer, locale, workflow.ConversionLevel?.ToString()))}</td><td>{Encode(LocalizeFlowchartConfidence(localizer, locale, workflow.Confidence?.ToString()))}</td></tr>");
         }
 
         html.AppendLine("</tbody></table>");
@@ -237,6 +284,16 @@ public sealed class HtmlUiPathReportExporter : IUiPathReportExporter
         html.AppendLine($"<div>{Encode(label)}</div><div>{Encode(value)}</div>");
     }
 
+    private static string? LocalizeDependencyNotes(RpaDevAssistant.Core.Dependencies.UiPathDependencyAnalysis package, string locale, IRpaDevAssistantLocalizer localizer)
+    {
+        if (package.UsageStatus == RpaDevAssistant.Core.Dependencies.UiPathDependencyUsageStatus.PossiblyUnused)
+        {
+            return localizer.Get("Ask.DependencyPossiblyUnusedReason", locale);
+        }
+
+        return package.Findings.Count > 0 ? string.Join("; ", package.Findings) : package.Notes;
+    }
+
     private static string Encode(string value)
     {
         return WebUtility.HtmlEncode(value);
@@ -289,5 +346,19 @@ public sealed class HtmlUiPathReportExporter : IUiPathReportExporter
     private static string LocalizeComplexityLevel(IRpaDevAssistantLocalizer localizer, string locale, string level)
     {
         return localizer.Get($"Complexity.Level.{level.Replace(" ", string.Empty, StringComparison.Ordinal)}", locale, fallback: level);
+    }
+
+    private static string LocalizeFlowchartLevel(IRpaDevAssistantLocalizer localizer, string locale, string? level)
+    {
+        return string.IsNullOrWhiteSpace(level)
+            ? "Unknown"
+            : localizer.Get($"Flowchart.Level.{level.Replace(" ", string.Empty, StringComparison.Ordinal)}", locale, fallback: level);
+    }
+
+    private static string LocalizeFlowchartConfidence(IRpaDevAssistantLocalizer localizer, string locale, string? confidence)
+    {
+        return string.IsNullOrWhiteSpace(confidence)
+            ? "Unknown"
+            : localizer.Get($"Flowchart.Confidence.{confidence.Replace(" ", string.Empty, StringComparison.Ordinal)}", locale, fallback: confidence);
     }
 }

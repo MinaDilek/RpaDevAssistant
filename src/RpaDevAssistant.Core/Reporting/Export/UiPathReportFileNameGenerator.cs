@@ -21,7 +21,12 @@ public static class UiPathReportFileNameGenerator
     {
         var safeProjectName = Sanitize(projectName);
         var timestamp = generatedAtUtc.ToString("yyyyMMdd-HHmmss");
-        var extension = format == UiPathReportExportFormat.Html ? "html" : "json";
+        var extension = format switch
+        {
+            UiPathReportExportFormat.Html => "html",
+            UiPathReportExportFormat.Pdf => "pdf",
+            _ => "json"
+        };
         return $"{safeProjectName}-RPA-Analysis-{timestamp}.{extension}";
     }
 

@@ -1,15 +1,15 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { Bell, Bot, ChevronDown, Download, FileJson, FolderOpen, History, Play, RefreshCw, RotateCcw, Send, Settings, Wrench } from 'lucide-react';
-import { analyzeProject, applyFix, askProject, checkHealth, exportCustomRules, exportRuleProfiles, getBackendBaseUrl, getFixSuggestion, getRuleProfiles, getRules, importCustomRules, listBackups, runAiReview, saveCustomRule, saveRuleProfile, setApiLocale, testCustomRule, undoFix, validateProject } from './services/apiClient';
-import { isTauriDesktop, selectProjectFolder } from './services/projectFolderService';
+import { Bell, Bot, ChevronDown, Download, FileJson, FolderOpen, GitBranch, History, Package, Play, RefreshCw, RotateCcw, Send, Settings, Wrench } from 'lucide-react';
+import { analyzeFlowchartConversion, analyzeProject, analyzeStandaloneFlowchart, applyFix, applyFlowchartConversion, askProject, checkHealth, compareAnalysisSnapshots, convertStandaloneFlowchart, exportCustomRules, exportRuleProfiles, getBackendBaseUrl, getFixSuggestion, getRuleProfiles, getRules, importCustomRules, listAnalysisHistory, listBackups, rollbackFlowchartConversion, runAiReview, saveCustomRule, saveRuleProfile, setApiLocale, testCustomRule, undoFix, validateProject } from './services/apiClient';
+import { isTauriDesktop, selectConvertedWorkflowSavePath, selectProjectFolder, selectXamlWorkflowFiles } from './services/projectFolderService';
 import { exportReport, type ReportFormat } from './services/reportExportService';
-import { getComplexityDistribution, getTopComplexWorkflows, getTopIssues, getWorkflowHealth, type Activity, type AiReviewResult, type AnalysisResponse, type BackupListResult, type BackupSummary, type CustomRuleDefinition, type CustomRuleTestResult, type Finding, type FixApplyResult, type FixSuggestion, type FixSuggestionResult, type ProjectAnswer, type RuleCatalogItem, type RuleProfile, type UndoResult } from './services/reportViewModel';
+import { getComplexityDistribution, getTopComplexWorkflows, getTopIssues, getWorkflowHealth, type Activity, type AiReviewResult, type AnalysisComparison, type AnalysisHistoryList, type AnalysisResponse, type AnalysisSnapshotSummary, type BackupListResult, type BackupSummary, type CustomRuleDefinition, type CustomRuleTestResult, type DependencyAnalysis, type DependencySummary, type Finding, type FixApplyResult, type FixSuggestion, type FixSuggestionResult, type FlowchartConversionApplyResult, type FlowchartConversionResult, type FlowchartConversionRollbackResult, type FlowchartPreviewNode, type ProjectAnswer, type RuleCatalogItem, type RuleProfile, type StandaloneFlowchartAnalysisResult, type StandaloneFlowchartConvertResult, type UndoResult } from './services/reportViewModel';
 import { localizeFinding, translate, type Locale } from './localization';
 import './styles.css';
 
 type HealthState = 'checking' | 'ready' | 'unavailable';
-type ActiveTab = 'overview' | 'findings' | 'history' | 'workflows' | 'report' | 'ai' | 'ask' | 'rules' | 'settings';
+type ActiveTab = 'overview' | 'findings' | 'history' | 'workflows' | 'dependencies' | 'flowchartConverter' | 'report' | 'ai' | 'ask' | 'rules' | 'settings';
 
 export function App() {
   const [projectPath, setProjectPath] = React.useState('');
@@ -29,6 +29,9 @@ export function App() {
   const [isApplyingFix, setIsApplyingFix] = React.useState(false);
   const [pendingApplyFix, setPendingApplyFix] = React.useState<FixSuggestion | null>(null);
   const [backups, setBackups] = React.useState<BackupSummary[]>([]);
+  const [analysisSnapshots, setAnalysisSnapshots] = React.useState<AnalysisSnapshotSummary[]>([]);
+  const [selectedComparison, setSelectedComparison] = React.useState<AnalysisComparison | null>(null);
+  const [comparisonLoading, setComparisonLoading] = React.useState(false);
   const [historyLoading, setHistoryLoading] = React.useState(false);
   const [pendingUndo, setPendingUndo] = React.useState<BackupSummary | null>(null);
   const [undoResult, setUndoResult] = React.useState<UndoResult | null>(null);
@@ -138,6 +141,11 @@ export function App() {
   }
 
   async function browseProjectFolder() {
+    if (!desktop) {
+      setStatusMessage(t('browserModeHint'));
+      return;
+    }
+
     const folder = await selectProjectFolder();
     if (!folder) {
       return;
@@ -180,6 +188,8 @@ export function App() {
       setFixResult(null);
       setApplyResult(null);
       await refreshBackups(projectPath.trim());
+      await refreshAnalysisHistory();
+      setSelectedComparison(result.comparisonWithPrevious ?? null);
       setSelectedFixFinding(null);
       setActiveTab('report');
       setStatusMessage(result.projectName ? t('analysisCompleted') : t('notUipathProject'));
@@ -298,6 +308,39 @@ export function App() {
     }
   }
 
+  async function refreshAnalysisHistory() {
+    setHistoryLoading(true);
+    try {
+      const result = await listAnalysisHistory() as AnalysisHistoryList;
+      setAnalysisSnapshots(result.snapshots ?? []);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : t('analysisHistoryLoadFailed'));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  async function compareSnapshots(snapshot: AnalysisSnapshotSummary) {
+    const comparisonProjectPath = snapshot.projectPath ?? projectPath.trim();
+    if (!comparisonProjectPath || !snapshot.previousSnapshotId) {
+      return;
+    }
+
+    setComparisonLoading(true);
+    try {
+      const result = await compareAnalysisSnapshots({
+        projectPath: comparisonProjectPath,
+        baselineSnapshotId: snapshot.previousSnapshotId,
+        targetSnapshotId: snapshot.snapshotId,
+      }) as AnalysisComparison;
+      setSelectedComparison(result);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : t('analysisComparisonFailed'));
+    } finally {
+      setComparisonLoading(false);
+    }
+  }
+
   async function undoSelectedBackup(backup: BackupSummary) {
     if (!projectPath.trim() || !backup.workflowPath) {
       setStatusMessage('Undo request is missing project or workflow details.');
@@ -386,6 +429,7 @@ export function App() {
     { label: t('codeReview'), tab: 'workflows' },
     { label: t('findingsNav'), tab: 'findings' },
     { label: t('rules'), tab: 'rules' },
+    { label: t('flowchartConverter'), tab: 'flowchartConverter' },
     { label: t('aiReview'), tab: 'ai' },
     { label: t('reports'), tab: 'report' },
     { label: t('reviewHistory'), tab: 'history' },
@@ -478,7 +522,7 @@ export function App() {
                     }}
                     placeholder={t('selectProjectFirst')}
                   />
-                  <button type="button" onClick={browseProjectFolder} disabled={!desktop} title={desktop ? t('browseTitleDesktop') : t('browseTitleBrowser')}>
+                  <button type="button" onClick={browseProjectFolder} title={desktop ? t('browseTitleDesktop') : t('browseTitleBrowser')}>
                     <FolderOpen size={18} />
                     {t('browse')}
                   </button>
@@ -511,6 +555,10 @@ export function App() {
                 <Download size={18} />
                 {exportingFormat === 'html' ? t('exporting') : t('exportHtml')}
               </button>
+              <button type="button" onClick={() => void runExport('pdf')} disabled={!analysis || exportingFormat !== null}>
+                <Download size={18} />
+                {exportingFormat === 'pdf' ? t('exporting') : t('exportPdf')}
+              </button>
               <button type="button" onClick={() => setReportModalOpen(true)} disabled={!analysis}>
                 {t('createReport')}
               </button>
@@ -523,6 +571,8 @@ export function App() {
 
           {activeTab === 'settings' ? (
             <SettingsView section={settingsSection} language={language} t={t} onSectionChange={setSettingsSection} onLanguageChange={setLanguage} />
+          ) : activeTab === 'flowchartConverter' ? (
+            <FlowchartConverterView desktop={desktop} t={t} />
           ) : activeTab === 'rules' ? (
             <RulesView
               rules={rules}
@@ -542,7 +592,7 @@ export function App() {
           ) : analysis ? (
             <>
               <nav className="tabs" aria-label="Analysis sections">
-                {(['overview', 'findings', 'history', 'workflows', 'rules', 'report', 'ai', 'ask'] as const).map((tab) => (
+                {(['overview', 'findings', 'history', 'workflows', 'dependencies', 'rules', 'report', 'ai', 'ask'] as const).map((tab) => (
                   <button
                     key={tab}
                     type="button"
@@ -554,10 +604,11 @@ export function App() {
                       : tab === 'findings' ? t('findingsNav')
                         : tab === 'history' ? t('changeHistory')
                             : tab === 'workflows' ? t('workflows')
-                              : tab === 'rules' ? t('rules')
-                                : tab === 'report' ? t('report')
-                                  : tab === 'ai' ? t('aiReview')
-                                    : t('askProject')}
+                              : tab === 'dependencies' ? t('dependencies')
+                                : tab === 'rules' ? t('rules')
+                                  : tab === 'report' ? t('report')
+                                    : tab === 'ai' ? t('aiReview')
+                                      : t('askProject')}
                   </button>
                 ))}
               </nav>
@@ -568,7 +619,20 @@ export function App() {
                     <button type="button" onClick={runAnalysis} disabled={isAnalyzing}>{t('rerunAnalysis')}</button>
                   </div>
                 )}
-                {activeTab === 'overview' && <Overview analysis={analysis} t={t} onNavigate={setActiveTab} />}
+                {activeTab === 'overview' && (
+                  <Overview
+                    analysis={analysis}
+                    t={t}
+                    onNavigate={setActiveTab}
+                    onOpenWorkflow={(workflowPath) => {
+                      const workflow = workflowHealth.find((item) => normalizeWorkflowPath(item.relativePath) === normalizeWorkflowPath(workflowPath));
+                      if (workflow) {
+                        setSelectedWorkflow(workflow);
+                        setActiveTab('workflows');
+                      }
+                    }}
+                  />
+                )}
                 {activeTab === 'findings' && (
                   <Findings
                     findings={filteredFindings}
@@ -592,15 +656,23 @@ export function App() {
                 {activeTab === 'history' && (
                   <ChangeHistory
                     backups={backups}
+                    snapshots={analysisSnapshots}
+                    selectedComparison={selectedComparison}
+                    comparisonLoading={comparisonLoading}
                     isLoading={historyLoading}
                     undoResult={undoResult}
                     t={t}
-                    onRefresh={() => void refreshBackups()}
+                    onRefresh={() => {
+                      void refreshBackups();
+                      void refreshAnalysisHistory();
+                    }}
+                    onCompare={compareSnapshots}
                     onUndo={(backup) => setPendingUndo(backup)}
                   />
                 )}
                 {activeTab === 'workflows' && (
                   <WorkflowsView
+                    projectPath={projectPath}
                     workflows={filteredWorkflows}
                     workflowCount={workflowHealth.length}
                     query={workflowQuery}
@@ -610,6 +682,7 @@ export function App() {
                     selectedWorkflow={selectedWorkflow}
                     allWorkflows={workflowHealth}
                     findings={findings}
+                    dependencyAnalysis={analysis.dependencyAnalysis ?? null}
                     locale={language}
                     t={t}
                     onQueryChange={setWorkflowQuery}
@@ -618,8 +691,13 @@ export function App() {
                     onSelectWorkflow={setSelectedWorkflow}
                     onReview={(workflowPath) => void runAiReviewFromUi('Workflow', workflowPath)}
                     isReviewing={aiReviewLoading}
+                    onProjectChanged={() => {
+                      setAnalysisOutOfDate(true);
+                      void refreshBackups();
+                    }}
                   />
                 )}
+                {activeTab === 'dependencies' && <DependenciesView dependencyAnalysis={analysis.dependencyAnalysis ?? null} findings={findings} locale={language} t={t} />}
                 {activeTab === 'report' && <ReportView analysis={analysis} topIssues={topIssues} workflows={workflowHealth} locale={language} t={t} />}
                 {activeTab === 'ai' && <AiReviewPanel result={aiReview} isLoading={aiReviewLoading} onAsk={(question) => void askProjectFromUi(question)} t={t} />}
                 {activeTab === 'ask' && (
@@ -662,14 +740,42 @@ export function App() {
   );
 }
 
-function Overview({ analysis, t, onNavigate }: { analysis: AnalysisResponse; t: (key: string, values?: Record<string, unknown>) => string; onNavigate?: (tab: ActiveTab) => void }) {
+function Overview({
+  analysis,
+  t,
+  onNavigate,
+  onOpenWorkflow,
+}: {
+  analysis: AnalysisResponse;
+  t: (key: string, values?: Record<string, unknown>) => string;
+  onNavigate?: (tab: ActiveTab) => void;
+  onOpenWorkflow?: (workflowPath: string) => void;
+}) {
   const criticalCount = analysis.analysis?.findings?.filter((finding) => finding.severity === 'Critical').length ?? 0;
   const highCount = analysis.analysis?.findings?.filter((finding) => finding.severity === 'Error').length ?? 0;
   const mediumCount = analysis.analysis?.findings?.filter((finding) => finding.severity === 'Warning').length ?? 0;
   const lowCount = analysis.analysis?.findings?.filter((finding) => finding.severity === 'Info' || finding.severity === 'Suggestion').length ?? 0;
   const passedChecks = Math.max(0, 25 - new Set((analysis.analysis?.findings ?? []).map((finding) => finding.ruleId)).size);
-  const complexityDistribution = getComplexityDistribution(analysis);
-  const topComplexWorkflows = getTopComplexWorkflows(analysis, 5);
+  const derivedComplexityDistribution = getComplexityDistribution(analysis);
+  const complexityDistribution = analysis.complexitySummary ? {
+    Low: analysis.complexitySummary.lowCount,
+    Medium: analysis.complexitySummary.mediumCount,
+    High: analysis.complexitySummary.highCount,
+    VeryHigh: analysis.complexitySummary.veryHighCount,
+  } : derivedComplexityDistribution;
+  const topComplexWorkflows = analysis.complexitySummary?.topComplexWorkflows?.slice(0, 5).map((workflow) => ({
+    relativePath: workflow.workflowPath,
+    complexityScore: workflow.complexityScore,
+    complexityLevel: workflow.complexityLevel,
+    executableActivityCount: workflow.executableActivityCount,
+    maxNestingDepth: workflow.maxNestingDepth,
+  })) ?? getTopComplexWorkflows(analysis, 5).map((workflow) => ({
+    relativePath: workflow.relativePath,
+    complexityScore: workflow.complexity.complexityScore ?? 0,
+    complexityLevel: workflow.complexity.complexityLevel ?? 'Low',
+    executableActivityCount: workflow.complexity.executableActivities ?? workflow.workflow?.activityCount ?? 0,
+    maxNestingDepth: workflow.complexity.maxNestingDepth ?? 0,
+  }));
 
   return (
     <div className="overview-view">
@@ -698,7 +804,21 @@ function Overview({ analysis, t, onNavigate }: { analysis: AnalysisResponse; t: 
         <button className="metric-button" type="button" onClick={() => onNavigate?.('findings')}>
           <Metric label={t('findingsNav')} value={analysis.analysis?.findings?.length ?? 0} />
         </button>
+        <button className="metric-button" type="button" onClick={() => onNavigate?.('dependencies')}>
+          <Metric label={t('dependencies')} value={analysis.dependencyAnalysis?.totalDependencies ?? 0} />
+        </button>
       </div>
+      {analysis.dependencyAnalysis && (
+        <section className="insight-panel">
+          <h2>{t('dependencyAnalysis')}</h2>
+          <div className="metric-grid compact">
+            <Metric label={t('usedDependencies')} value={analysis.dependencyAnalysis.usedDependencies} />
+            <Metric label={t('possiblyUnused')} value={analysis.dependencyAnalysis.possiblyUnusedDependencies} />
+            <Metric label={t('potentialConflicts')} value={analysis.dependencyAnalysis.potentialConflicts} />
+            <Metric label={t('modernClassicMode')} value={analysis.dependencyAnalysis.modernClassicMode} />
+          </div>
+        </section>
+      )}
       <section className="insight-panel">
         <h2>{t('reviewSummary')}</h2>
         <p>{buildReviewSummary(analysis, t)}</p>
@@ -719,16 +839,27 @@ function Overview({ analysis, t, onNavigate }: { analysis: AnalysisResponse; t: 
                   <th>Workflow</th>
                   <th>{t('complexityScore')}</th>
                   <th>{t('complexityLevel')}</th>
+                  <th>{t('executableActivityCount')}</th>
                   <th>{t('maxNestingDepth')}</th>
                 </tr>
               </thead>
               <tbody>
                 {topComplexWorkflows.map((item) => (
-                  <tr key={item.relativePath}>
-                    <td>{item.relativePath}</td>
-                    <td>{item.complexity.complexityScore ?? 0}</td>
-                    <td>{localizeComplexityLevel(item.complexity.complexityLevel, t)}</td>
-                    <td>{item.complexity.maxNestingDepth ?? 0}</td>
+                  <tr
+                    key={item.relativePath}
+                    className={onOpenWorkflow ? 'clickable-row' : undefined}
+                  >
+                    <td>
+                      {onOpenWorkflow ? (
+                        <button className="link-button" type="button" onClick={() => onOpenWorkflow(item.relativePath)}>
+                          {item.relativePath}
+                        </button>
+                      ) : item.relativePath}
+                    </td>
+                    <td>{item.complexityScore ?? 0}</td>
+                    <td>{localizeComplexityLevel(item.complexityLevel, t)}</td>
+                    <td>{item.executableActivityCount ?? 0}</td>
+                    <td>{item.maxNestingDepth ?? 0}</td>
                   </tr>
                 ))}
               </tbody>
@@ -737,6 +868,308 @@ function Overview({ analysis, t, onNavigate }: { analysis: AnalysisResponse; t: 
         )}
       </section>
     </div>
+  );
+}
+
+function FlowchartConverterView({
+  desktop,
+  t,
+}: {
+  desktop: boolean;
+  t: (key: string, values?: Record<string, unknown>) => string;
+}) {
+  const [xamlPath, setXamlPath] = React.useState('');
+  const [results, setResults] = React.useState<StandaloneFlowchartAnalysisResult[]>([]);
+  const [selectedPath, setSelectedPath] = React.useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = React.useState(false);
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [message, setMessage] = React.useState<string | null>(null);
+  const [saveResult, setSaveResult] = React.useState<StandaloneFlowchartConvertResult | null>(null);
+  const [outputPath, setOutputPath] = React.useState('');
+  const selected = results.find((item) => item.filePath === selectedPath) ?? results[0] ?? null;
+  const selectedFlowchartNodes = selected?.graph?.nodes ?? [];
+  const selectedHasFlowchart = selectedFlowchartNodes.length > 0;
+
+  React.useEffect(() => {
+    if (selected?.canConvert) {
+      setOutputPath(defaultConvertedPath(selected.filePath, selected.suggestedOutputFileName));
+    } else {
+      setOutputPath('');
+    }
+  }, [selected?.filePath, selected?.suggestedOutputFileName, selected?.canConvert]);
+
+  async function pickFiles() {
+    const paths = await selectXamlWorkflowFiles();
+    if (paths.length === 0) {
+      setMessage(desktop ? null : t('standaloneBrowserModeHint'));
+      return;
+    }
+
+    setXamlPath(paths[0]);
+    await analyzePaths(paths);
+  }
+
+  async function analyzeManualPath() {
+    const path = xamlPath.trim();
+    if (!path) {
+      setMessage(t('xamlPathRequired'));
+      return;
+    }
+
+    await analyzePaths([path]);
+  }
+
+  async function analyzePaths(paths: string[]) {
+    setIsAnalyzing(true);
+    setMessage(null);
+    setSaveResult(null);
+    try {
+      const analyzed = await Promise.all(paths.map((path) => analyzeStandaloneFlowchart({ xamlFilePath: path }) as Promise<StandaloneFlowchartAnalysisResult>));
+      setResults((current) => mergeStandaloneResults(current, analyzed));
+      setSelectedPath(analyzed[0]?.filePath ?? null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('standaloneFlowchartAnalyzeFailed'));
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
+
+  async function chooseOutputPath() {
+    if (!selected?.canConvert) {
+      return null;
+    }
+
+    const suggested = outputPath.trim() || defaultConvertedPath(selected.filePath, selected.suggestedOutputFileName);
+    const chosen = desktop
+      ? await selectConvertedWorkflowSavePath(suggested)
+      : window.prompt(t('outputXamlPath'), suggested);
+    if (chosen) {
+      setOutputPath(chosen);
+    }
+
+    return chosen;
+  }
+
+  async function saveConvertedWorkflow() {
+    if (!selected?.canConvert) {
+      return;
+    }
+
+    let targetPath = outputPath.trim();
+    if (!targetPath) {
+      targetPath = await chooseOutputPath() ?? '';
+      if (!targetPath) {
+        setMessage(t('outputXamlPathRequired'));
+        return;
+      }
+    }
+
+    setIsSaving(true);
+    setMessage(null);
+    setSaveResult(null);
+    try {
+      const result = await convertStandaloneFlowchart({
+        xamlFilePath: selected.filePath,
+        outputPath: targetPath,
+        expectedWorkflowHash: selected.workflowHash,
+        confirmed: true,
+      }) as StandaloneFlowchartConvertResult;
+      setSaveResult(result);
+      setMessage(result.message);
+      setResults((current) => current.map((item) => item.filePath === selected.filePath ? { ...item, status: 'Converted' } : item));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('standaloneFlowchartConvertFailed'));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <section className="results-panel flowchart-converter-view" aria-label={t('flowchartConverter')}>
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">{t('standaloneTool')}</span>
+          <h2>{t('flowchartConverter')}</h2>
+          <p>{t('flowchartConverterHelp')}</p>
+        </div>
+      </div>
+
+      <div className="project-grid">
+        <div className="field-group">
+          <label htmlFor="standaloneXamlPath">{t('xamlFilePath')}</label>
+          <div className="path-row">
+            <input id="standaloneXamlPath" value={xamlPath} onChange={(event) => setXamlPath(event.target.value)} placeholder={t('selectXamlFirst')} />
+            <button type="button" onClick={() => void pickFiles()} title={desktop ? t('selectXamlFile') : t('browseTitleBrowser')}>
+              <FolderOpen size={18} />
+              {t('selectXamlFile')}
+            </button>
+          </div>
+        </div>
+        <div className="field-group">
+          <label>{t('standaloneContext')}</label>
+          <div className="validation-row">
+            <span className={xamlPath.trim() ? 'status-dot ready' : 'status-dot'} />
+            <span>{xamlPath.trim() ? t('xamlFileSelected') : t('noXamlFileSelected')}</span>
+          </div>
+        </div>
+      </div>
+      {!desktop && <p className="hint">{t('standaloneBrowserModeHint')}</p>}
+      <div className="action-row">
+        <button className="primary-action" type="button" onClick={() => void analyzeManualPath()} disabled={isAnalyzing}>
+          <GitBranch size={18} />
+          {isAnalyzing ? t('analyzing') : t('analyzeXaml')}
+        </button>
+      </div>
+      {message && <p className={saveResult?.success ? 'success-text' : 'error-text'}>{message}</p>}
+
+      <div className={`workflows-layout ${selected ? 'with-drawer' : 'single-column'}`}>
+        <section className="list-panel">
+          <h3>{t('selectedXamlFiles')}</h3>
+          {results.length === 0 ? <p className="empty-state">{t('flowchartConverterEmpty')}</p> : (
+            <table className="clickable-table">
+              <thead>
+                <tr>
+                  <th>{t('fileName')}</th>
+                  <th>{t('structureType')}</th>
+                  <th>{t('status')}</th>
+                  <th>{t('activityCount')}</th>
+                  <th>{t('nodes')}</th>
+                  <th>{t('decisions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.map((result) => (
+                  <tr key={result.filePath} onClick={() => setSelectedPath(result.filePath)}>
+                    <td>{result.fileName}</td>
+                    <td>{result.structureType}</td>
+                    <td><span className={`status-badge ${flowchartStandaloneStatusClass(result.status)}`}>{localizeStandaloneFlowchartStatus(result.status, t)}</span></td>
+                    <td>{result.activityCount ?? 0}</td>
+                    <td>{result.flowchartNodeCount ?? result.graph?.nodes.length ?? 0}</td>
+                    <td>{result.decisionCount ?? result.graph?.decisions.length ?? 0}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+
+        {selected && (
+          <aside className="detail-drawer" aria-label={t('flowchartConverterDetail')}>
+            <div className="section-header">
+              <div>
+                <span className="eyebrow">{t('workflowDetail')}</span>
+                <h2>{selected.fileName}</h2>
+              </div>
+            </div>
+            <div className="metric-grid compact">
+              <Metric label={t('xamlFilePath')} value={selected.filePath} />
+              <Metric label={t('currentStructure')} value={selected.structureType} />
+              <Metric label={t('status')} value={localizeStandaloneFlowchartStatus(selected.status, t)} />
+              <Metric label={t('arguments')} value={selected.argumentCount ?? 0} />
+              <Metric label={t('nodes')} value={selected.flowchartNodeCount ?? selected.graph?.nodes.length ?? 0} />
+              <Metric label={t('switches')} value={selected.switchCount ?? selected.graph?.switches.length ?? 0} />
+            </div>
+            <p className="empty-state">{t('originalFileNotModified')}</p>
+            {!selected.canConvert && (
+              <div className="notice conversion-unavailable">
+                <strong>{t('conversionNotAvailable')}</strong>
+                <p>{t(selectedHasFlowchart ? 'conversionNotAvailableNestedReason' : 'conversionNotAvailableReason')}</p>
+                {(selected.messages?.length ?? 0) > 0 && <ul>{selected.messages?.map((item) => <li key={item}>{item}</li>)}</ul>}
+              </div>
+            )}
+            {selectedHasFlowchart && !selected.assessment && (
+              <div className="conversion-panel">
+                <section>
+                  <h3>{t('detectedFlowchartNodes')}</h3>
+                  <ul className="compact-list">
+                    {selectedFlowchartNodes.slice(0, 12).map((node) => (
+                      <li key={node.id}>{node.id} · {node.type} · {node.displayName ?? node.activityName ?? '-'}</li>
+                    ))}
+                  </ul>
+                </section>
+              </div>
+            )}
+            {selected.assessment && (
+              <div className="conversion-panel">
+                <div className="metric-grid compact">
+                  <Metric label={t('convertibility')} value={localizeFlowchartLevel(selected.assessment.conversionLevel, t)} />
+                  <Metric label={t('confidence')} value={localizeFlowchartConfidence(selected.assessment.confidence, t)} />
+                  <Metric label={t('cycles')} value={selected.graph?.hasCycles ? t('yes') : t('no')} />
+                  <Metric label={t('unreachableNodes')} value={selected.graph?.hasUnreachableNodes ? t('yes') : t('no')} />
+                </div>
+                <div className="before-after-grid">
+                  <section>
+                    <h3>{t('currentFlowchart')}</h3>
+                    <ul className="compact-list">
+                      {(selected.graph?.nodes ?? []).slice(0, 12).map((node) => (
+                        <li key={node.id}>{node.id} · {node.type} · {node.displayName ?? node.activityName ?? '-'}</li>
+                      ))}
+                    </ul>
+                  </section>
+                  <section>
+                    <h3>{t('proposedSequence')}</h3>
+                    {selected.plan?.previewTree ? <PreviewTree node={selected.plan.previewTree} /> : <p className="empty-state">{t('noPreviewAvailable')}</p>}
+                  </section>
+                </div>
+                <details open>
+                  <summary>{t('steps')}</summary>
+                  <ul>{selected.plan?.steps.map((step) => <li key={step}>{step}</li>)}</ul>
+                </details>
+                <details open>
+                  <summary>{t('risks')}</summary>
+                  {(selected.assessment.risks.length ?? 0) === 0 ? <p className="empty-state">{t('noRisks')}</p> : (
+                    <ul>{selected.assessment.risks.map((risk) => <li key={risk}>{risk}</li>)}</ul>
+                  )}
+                </details>
+                <details>
+                  <summary>{t('conversionMappings')}</summary>
+                  <table className="compact-table">
+                    <thead><tr><th>{t('sourceNode')}</th><th>{t('targetPath')}</th><th>{t('type')}</th></tr></thead>
+                    <tbody>
+                      {(selected.plan?.mappings ?? []).map((mapping) => (
+                        <tr key={`${mapping.sourceNodeId}-${mapping.targetPath}`}>
+                          <td>{mapping.sourceNodeId}</td>
+                          <td>{mapping.targetPath}</td>
+                          <td>{mapping.transformationType}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </details>
+              </div>
+            )}
+            <div className="conversion-actions">
+              {selected.canConvert ? (
+                <div className="field-group conversion-output-field">
+                  <label htmlFor="standaloneOutputPath">{t('outputXamlPath')}</label>
+                  <div className="path-row">
+                    <input id="standaloneOutputPath" value={outputPath} onChange={(event) => setOutputPath(event.target.value)} placeholder={t('chooseOutputPathFirst')} />
+                    <button type="button" onClick={() => void chooseOutputPath()}>
+                      <FolderOpen size={18} />
+                      {t('chooseOutputPath')}
+                    </button>
+                  </div>
+                  <button className="primary-action" type="button" onClick={() => void saveConvertedWorkflow()} disabled={isSaving}>
+                    <Download size={18} />
+                    {isSaving ? t('saving') : t('convertAndSave')}
+                  </button>
+                </div>
+              ) : (
+                <span className="status-badge review">{t('manualReviewRequired')}</span>
+              )}
+            </div>
+            {saveResult && (
+              <div className={`notice ${saveResult.success ? 'success' : 'error'}`}>
+                <strong>{saveResult.success ? t('convertedWorkflowSaved') : t('conversionWasNotApplied')}</strong>
+                <p>{saveResult.message}</p>
+                {saveResult.outputPath && <p>{t('outputXamlPath')}: {saveResult.outputPath}</p>}
+                <p>{t('currentStructure')}: {saveResult.originalStructure} → {saveResult.newStructure}</p>
+              </div>
+            )}
+          </aside>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -1528,17 +1961,25 @@ function ApplyFixDialog({
 
 function ChangeHistory({
   backups,
+  snapshots,
+  selectedComparison,
+  comparisonLoading,
   isLoading,
   undoResult,
   t,
   onRefresh,
+  onCompare,
   onUndo,
 }: {
   backups: BackupSummary[];
+  snapshots: AnalysisSnapshotSummary[];
+  selectedComparison?: AnalysisComparison | null;
+  comparisonLoading: boolean;
   isLoading: boolean;
   undoResult?: UndoResult | null;
   t: (key: string, values?: Record<string, unknown>) => string;
   onRefresh: () => void;
+  onCompare: (snapshot: AnalysisSnapshotSummary) => void;
   onUndo: (backup: BackupSummary) => void;
 }) {
   return (
@@ -1550,6 +1991,78 @@ function ChangeHistory({
           {isLoading ? t('loading') : t('refresh')}
         </button>
       </div>
+      <section className="history-section">
+        <h3>{t('analysisHistory')}</h3>
+        {snapshots.length === 0 ? (
+          <p className="empty-state">{t('noAnalysisHistory')}</p>
+        ) : (
+          <div className="history-list">
+            <p className="hint">{t('allProjectsHistory')}</p>
+            {snapshots.map((snapshot) => (
+              <article className="history-entry" key={snapshot.snapshotId}>
+                <div>
+                  <strong>{formatTimestamp(snapshot.generatedAtUtc)}</strong>
+                  <p>{snapshot.projectName ?? '-'} · {snapshot.projectPath ?? '-'}</p>
+                  <p>{t('score')}: {snapshot.score} · {t('grade')} {snapshot.grade} · {snapshot.totalFindings} {t('findingsNav')}</p>
+                  <p>{snapshot.workflowCount} {t('workflows')} · {snapshot.totalActivityCount} {t('activities')}</p>
+                  {snapshot.scoreDelta !== null && snapshot.scoreDelta !== undefined && (
+                    <span>{t('scoreChange')}: {formatSigned(snapshot.scoreDelta)} · {t('newFindings')}: {snapshot.newFindingCount ?? 0} · {t('resolvedFindings')}: {snapshot.resolvedFindingCount ?? 0}</span>
+                  )}
+                </div>
+                <div className="history-actions">
+                  {snapshot.previousSnapshotId ? (
+                    <button type="button" onClick={() => onCompare(snapshot)} disabled={comparisonLoading}>
+                      {comparisonLoading ? t('loading') : t('comparePrevious')}
+                    </button>
+                  ) : (
+                    <span className="hint">{t('noPreviousSnapshot')}</span>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+      {selectedComparison && (
+        <section className="comparison-panel">
+          <h3>{t('beforeAfterComparison')}</h3>
+          <div className="metric-grid compact">
+            <Metric label={t('scoreChange')} value={formatSigned(selectedComparison.scoreDelta)} />
+            <Metric label={t('findingChange')} value={formatSigned(selectedComparison.totalFindingDelta)} />
+            <Metric label={t('newFindings')} value={selectedComparison.newFindings.length} />
+            <Metric label={t('resolvedFindings')} value={selectedComparison.resolvedFindings.length} />
+            <Metric label={t('unchangedFindings')} value={selectedComparison.unchangedFindings.length} />
+            <Metric label={t('changedFindings')} value={selectedComparison.changedFindings.length} />
+          </div>
+          <ComparisonFindingList title={t('newFindings')} findings={selectedComparison.newFindings} emptyLabel={t('none')} />
+          <ComparisonFindingList title={t('resolvedFindings')} findings={selectedComparison.resolvedFindings} emptyLabel={t('none')} />
+          <h4>{t('workflowChanges')}</h4>
+          {selectedComparison.workflowChanges.length === 0 ? (
+            <p className="empty-state">{t('noWorkflowChanges')}</p>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Workflow</th>
+                  <th>{t('findingChange')}</th>
+                  <th>{t('activityChange')}</th>
+                  <th>{t('complexityChange')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedComparison.workflowChanges.slice(0, 10).map((workflow) => (
+                  <tr key={workflow.workflowPath}>
+                    <td>{workflow.workflowPath}</td>
+                    <td>{formatSigned(workflow.findingCountDelta)}</td>
+                    <td>{formatSigned(workflow.activityCountDelta)}</td>
+                    <td>{workflow.complexityScoreDelta === null || workflow.complexityScoreDelta === undefined ? '-' : formatSigned(workflow.complexityScoreDelta)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      )}
       {undoResult && (
         <section className={undoResult.success ? 'apply-result success' : 'apply-result error'}>
           <h3>{undoResult.success ? t('changeRestoredSuccessfully') : t('changeWasNotRestored')}</h3>
@@ -1559,6 +2072,8 @@ function ChangeHistory({
           {undoResult.requiresReanalysis && <p>{t('reanalysisRequired')}</p>}
         </section>
       )}
+      <section className="history-section">
+      <h3>{t('fixHistory')}</h3>
       {backups.length === 0 ? (
         <p className="empty-state">{t('noFixHistory')}</p>
       ) : (
@@ -1586,8 +2101,32 @@ function ChangeHistory({
           ))}
         </div>
       )}
+      </section>
     </div>
   );
+}
+
+function ComparisonFindingList({ title, findings, emptyLabel }: { title: string; findings: AnalysisComparison['newFindings']; emptyLabel: string }) {
+  return (
+    <div className="comparison-findings">
+      <h4>{title}</h4>
+      {findings.length === 0 ? (
+        <p className="empty-state">{emptyLabel}</p>
+      ) : (
+        <ul>
+          {findings.slice(0, 10).map((item) => (
+            <li key={`${item.state}-${item.finding.id}-${item.finding.contentHash ?? item.finding.message}`}>
+              <strong>{item.finding.ruleId}</strong> {item.finding.workflowPath ?? ''} · {item.finding.message ?? item.finding.ruleName}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function formatSigned(value: number): string {
+  return value > 0 ? `+${value}` : value.toString();
 }
 
 function UndoDialog({
@@ -1660,7 +2199,134 @@ function WorkflowHealth({ workflows, onReview, isReviewing = false, t = (key, va
   );
 }
 
+function DependenciesView({ dependencyAnalysis, findings, locale, t }: { dependencyAnalysis: DependencySummary | null; findings: Finding[]; locale: Locale; t: (key: string, values?: Record<string, unknown>) => string }) {
+  const [query, setQuery] = React.useState('');
+  const [category, setCategory] = React.useState('All');
+  const [usage, setUsage] = React.useState('All');
+  const [risk, setRisk] = React.useState('All');
+  const [selected, setSelected] = React.useState<DependencyAnalysis | null>(null);
+  const packages = dependencyAnalysis?.packages ?? [];
+  const categories = ['All', ...Array.from(new Set(packages.map((item) => item.category)))];
+  const usages = ['All', ...Array.from(new Set(packages.map((item) => item.usageStatus)))];
+  const risks = ['All', ...Array.from(new Set(packages.map((item) => item.riskLevel)))];
+  const filtered = packages.filter((item) => {
+    const text = `${item.name} ${item.declaredVersion ?? ''} ${item.category}`.toLowerCase();
+    return (!query.trim() || text.includes(query.trim().toLowerCase()))
+      && (category === 'All' || item.category === category)
+      && (usage === 'All' || item.usageStatus === usage)
+      && (risk === 'All' || item.riskLevel === risk);
+  });
+  const relatedFindings = selected
+    ? findings.filter((finding) => finding.currentValue?.includes(selected.name) || finding.message?.includes(selected.name))
+    : [];
+
+  if (!dependencyAnalysis) {
+    return <p className="empty-state">{t('noDependencyAnalysis')}</p>;
+  }
+
+  return (
+    <div className={`workflows-layout ${selected ? 'with-drawer' : 'single-column'}`}>
+      <section className="list-panel">
+        <div className="section-header">
+          <div>
+            <h2>{t('dependencyAnalysis')}</h2>
+            <p>{t('dependencyAnalysisHelp')}</p>
+          </div>
+        </div>
+        <div className="metric-grid compact">
+          <Metric label={t('dependencies')} value={dependencyAnalysis.totalDependencies} />
+          <Metric label={t('uiPathDependencies')} value={dependencyAnalysis.uiPathDependencies} />
+          <Metric label={t('thirdPartyDependencies')} value={dependencyAnalysis.thirdPartyDependencies} />
+          <Metric label={t('possiblyUnused')} value={dependencyAnalysis.possiblyUnusedDependencies} />
+          <Metric label={t('potentialConflicts')} value={dependencyAnalysis.potentialConflicts} />
+          <Metric label={t('modernClassicMode')} value={dependencyAnalysis.modernClassicMode} />
+        </div>
+        <div className="workflow-tools">
+          <input aria-label={t('searchPackages')} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('searchPackages')} />
+          <select aria-label={t('category')} value={category} onChange={(event) => setCategory(event.target.value)}>
+            {categories.map((item) => <option key={item} value={item}>{item === 'All' ? t('all') : item}</option>)}
+          </select>
+          <select aria-label={t('usage')} value={usage} onChange={(event) => setUsage(event.target.value)}>
+            {usages.map((item) => <option key={item} value={item}>{item === 'All' ? t('all') : item}</option>)}
+          </select>
+          <select aria-label={t('risk')} value={risk} onChange={(event) => setRisk(event.target.value)}>
+            {risks.map((item) => <option key={item} value={item}>{item === 'All' ? t('all') : item}</option>)}
+          </select>
+        </div>
+        <table className="clickable-table">
+          <thead>
+            <tr>
+              <th>{t('package')}</th>
+              <th>{t('version')}</th>
+              <th>{t('category')}</th>
+              <th>{t('usage')}</th>
+              <th>{t('risk')}</th>
+              <th>{t('usedByWorkflows')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((item) => (
+              <tr key={item.name} onClick={() => setSelected(item)}>
+                <td><Package size={14} /> {item.name}</td>
+                <td>{item.declaredVersion ?? '-'}</td>
+                <td>{item.category}</td>
+                <td>{item.usageStatus}</td>
+                <td><span className={`status-badge ${item.riskLevel === 'Low' ? 'good' : item.riskLevel === 'Medium' ? 'review' : 'risk'}`}>{item.riskLevel}</span></td>
+                <td>{item.usedByWorkflows?.length ?? 0}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+      {selected && (
+        <aside className="detail-drawer" aria-label="Dependency detail">
+          <div className="section-header">
+            <div>
+              <span className="eyebrow">{t('dependencyDetail')}</span>
+              <h2>{selected.name}</h2>
+            </div>
+            <button type="button" onClick={() => setSelected(null)}>{t('close')}</button>
+          </div>
+          <div className="metric-grid compact">
+            <Metric label={t('version')} value={selected.declaredVersion ?? '-'} />
+            <Metric label={t('category')} value={selected.category} />
+            <Metric label={t('usage')} value={selected.usageStatus} />
+            <Metric label={t('risk')} value={selected.riskLevel} />
+            <Metric label={t('compatibilityStatus')} value={selected.compatibilityStatus} />
+            <Metric label={t('versionStatus')} value={selected.versionStatus} />
+          </div>
+          <details open>
+            <summary>{t('usedActivities')}</summary>
+            {(selected.usedActivities ?? []).length === 0 ? <p className="empty-state">{t('noMappedActivities')}</p> : (
+              <div className="chip-list">{selected.usedActivities!.map((activity) => <span className="workflow-chip" key={activity}>{activity}</span>)}</div>
+            )}
+          </details>
+          <details open>
+            <summary>{t('usedByWorkflows')}</summary>
+            {(selected.usedByWorkflows ?? []).length === 0 ? <p className="empty-state">{t('noMappedWorkflows')}</p> : (
+              <div className="chip-list">{selected.usedByWorkflows!.map((workflow) => <span className="workflow-chip" key={workflow}>{workflow}</span>)}</div>
+            )}
+          </details>
+          <details open>
+            <summary>{t('compatibilityNotes')}</summary>
+            {(selected.findings ?? []).length === 0 && !selected.notes ? <p className="empty-state">{t('noDependencyRisks')}</p> : (
+              <ul>{[...(selected.findings ?? []), selected.notes].filter(Boolean).map((note) => <li key={note}>{note}</li>)}</ul>
+            )}
+          </details>
+          <details>
+            <summary>{t('relatedFindings')}</summary>
+            {relatedFindings.length === 0 ? <p className="empty-state">{t('noRelatedFindings')}</p> : relatedFindings.map((finding) => (
+              <FindingRow key={`${finding.ruleId}-${finding.currentValue}`} finding={finding} locale={locale} t={t} />
+            ))}
+          </details>
+        </aside>
+      )}
+    </div>
+  );
+}
+
 function WorkflowsView({
+  projectPath,
   workflows,
   workflowCount,
   query,
@@ -1670,6 +2336,7 @@ function WorkflowsView({
   selectedWorkflow,
   allWorkflows,
   findings,
+  dependencyAnalysis,
   locale,
   t,
   onQueryChange,
@@ -1678,7 +2345,9 @@ function WorkflowsView({
   onSelectWorkflow,
   onReview,
   isReviewing,
+  onProjectChanged,
 }: {
+  projectPath: string;
   workflows: ReturnType<typeof getWorkflowHealth>;
   workflowCount: number;
   query: string;
@@ -1688,6 +2357,7 @@ function WorkflowsView({
   selectedWorkflow: ReturnType<typeof getWorkflowHealth>[number] | null;
   allWorkflows: ReturnType<typeof getWorkflowHealth>;
   findings: Finding[];
+  dependencyAnalysis: DependencySummary | null;
   locale: Locale;
   t: (key: string, values?: Record<string, unknown>) => string;
   onQueryChange: (value: string) => void;
@@ -1696,9 +2366,97 @@ function WorkflowsView({
   onSelectWorkflow: (workflow: ReturnType<typeof getWorkflowHealth>[number] | null) => void;
   onReview: (workflowPath: string) => void;
   isReviewing: boolean;
+  onProjectChanged: () => void;
 }) {
   const invocationGraph = React.useMemo(() => buildInvocationGraph(allWorkflows), [allWorkflows]);
-  const selectedDetail = selectedWorkflow ? buildWorkflowDetail(selectedWorkflow, allWorkflows, findings, invocationGraph) : null;
+  const selectedDetail = selectedWorkflow ? buildWorkflowDetail(selectedWorkflow, allWorkflows, findings, invocationGraph, dependencyAnalysis) : null;
+  const [conversionResult, setConversionResult] = React.useState<FlowchartConversionResult | null>(null);
+  const [conversionError, setConversionError] = React.useState<string | null>(null);
+  const [conversionLoading, setConversionLoading] = React.useState(false);
+  const [conversionApplyResult, setConversionApplyResult] = React.useState<FlowchartConversionApplyResult | null>(null);
+  const [conversionRollbackResult, setConversionRollbackResult] = React.useState<FlowchartConversionRollbackResult | null>(null);
+  const [conversionApplying, setConversionApplying] = React.useState(false);
+  const [conversionRollingBack, setConversionRollingBack] = React.useState(false);
+  const [confirmConversionOpen, setConfirmConversionOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    setConversionResult(null);
+    setConversionError(null);
+    setConversionApplyResult(null);
+    setConversionRollbackResult(null);
+    setConfirmConversionOpen(false);
+  }, [selectedWorkflow?.relativePath]);
+
+  async function handleAnalyzeConversion() {
+    if (!selectedWorkflow || !projectPath) {
+      return;
+    }
+
+    setConversionLoading(true);
+    setConversionError(null);
+    try {
+      const result = await analyzeFlowchartConversion({
+        projectPath,
+        workflowPath: selectedWorkflow.relativePath,
+      }) as FlowchartConversionResult;
+      setConversionResult(result);
+      setConversionApplyResult(null);
+      setConversionRollbackResult(null);
+    } catch (error) {
+      setConversionError(error instanceof Error ? error.message : t('flowchartConversionFailed'));
+    } finally {
+      setConversionLoading(false);
+    }
+  }
+
+  async function handleApplyConversion() {
+    if (!selectedWorkflow || !projectPath || !conversionResult) {
+      return;
+    }
+
+    setConversionApplying(true);
+    setConversionError(null);
+    try {
+      const result = await applyFlowchartConversion({
+        projectPath,
+        workflowPath: selectedWorkflow.relativePath,
+        expectedWorkflowHash: conversionResult.workflowHash,
+        confirmed: true,
+        createBackup: true,
+      }) as FlowchartConversionApplyResult;
+      setConversionApplyResult(result);
+      setConfirmConversionOpen(false);
+      onProjectChanged();
+    } catch (error) {
+      setConversionError(error instanceof Error ? error.message : t('flowchartConversionApplyFailed'));
+    } finally {
+      setConversionApplying(false);
+    }
+  }
+
+  async function handleRollbackConversion() {
+    if (!selectedWorkflow || !projectPath || !conversionApplyResult?.backupId) {
+      return;
+    }
+
+    setConversionRollingBack(true);
+    setConversionError(null);
+    try {
+      const result = await rollbackFlowchartConversion({
+        projectPath,
+        workflowPath: selectedWorkflow.relativePath,
+        backupId: conversionApplyResult.backupId,
+        expectedCurrentHash: conversionApplyResult.convertedHash,
+        createSafetyBackup: true,
+      }) as FlowchartConversionRollbackResult;
+      setConversionRollbackResult(result);
+      onProjectChanged();
+    } catch (error) {
+      setConversionError(error instanceof Error ? error.message : t('flowchartConversionRollbackFailed'));
+    } finally {
+      setConversionRollingBack(false);
+    }
+  }
 
   return (
     <div className={`workflows-layout ${selectedWorkflow ? 'with-drawer' : 'single-column'}`}>
@@ -1739,7 +2497,7 @@ function WorkflowsView({
               return (
                 <tr key={workflow.relativePath} onClick={() => onSelectWorkflow(workflow)}>
                   <td>{workflow.relativePath}</td>
-                  <td>{getWorkflowType(workflow.relativePath)}</td>
+                  <td>{formatWorkflowStructure(workflow.workflow, t)}</td>
                   <td>{workflow.activityCount}</td>
                   <td>{workflow.findingCount}</td>
                   <td><span className={`status-badge ${complexityBadgeClass(workflow.complexity?.complexityLevel)}`}>{localizeComplexityLevel(workflow.complexity?.complexityLevel, t)}</span></td>
@@ -1767,7 +2525,44 @@ function WorkflowsView({
             <Metric label={t('activityCount')} value={selectedWorkflow.activityCount} />
             <Metric label={t('executableActivityCount')} value={selectedDetail.executableActivityCount} />
             <Metric label={t('findingCount')} value={selectedWorkflow.findingCount} />
+            <Metric label={t('structureType')} value={selectedWorkflow.workflow.structureType ?? t('unknown')} />
+            {selectedWorkflow.workflow.containsFlowchart && <Metric label={t('flowchartCount')} value={selectedWorkflow.workflow.flowchartCount ?? 1} />}
           </div>
+          {selectedWorkflow.workflow.structureType === 'Flowchart' ? (
+            <details open>
+              <summary>{t('flowchartConversion')}</summary>
+              <div className="conversion-actions">
+                <button type="button" onClick={() => void handleAnalyzeConversion()} disabled={conversionLoading || !projectPath}>
+                  <GitBranch size={16} />
+                  {conversionLoading ? t('analyzing') : t('previewConversion')}
+                </button>
+                {conversionResult?.plan && (
+                  <button type="button" onClick={() => copyText(formatConversionPlan(conversionResult, t))}>
+                    {t('copyPlan')}
+                  </button>
+                )}
+              </div>
+              <p className="empty-state">{t('conversionPreviewOnly')}</p>
+              {conversionError && <p className="error-text">{conversionError}</p>}
+              {conversionResult && (
+                <FlowchartConversionPanel
+                  result={conversionResult}
+                  applyResult={conversionApplyResult}
+                  rollbackResult={conversionRollbackResult}
+                  isApplying={conversionApplying}
+                  isRollingBack={conversionRollingBack}
+                  t={t}
+                  onApply={() => setConfirmConversionOpen(true)}
+                  onRollback={() => void handleRollbackConversion()}
+                />
+              )}
+            </details>
+          ) : selectedWorkflow.workflow.containsFlowchart ? (
+            <details open>
+              <summary>{t('flowchartConversion')}</summary>
+              <p className="empty-state">{t('nestedFlowchartConversionNotSupported')}</p>
+            </details>
+          ) : null}
           {selectedDetail.complexity && (
             <details open>
               <summary>{t('complexity')}</summary>
@@ -1819,6 +2614,14 @@ function WorkflowsView({
             )}
           </details>
           <details>
+            <summary>{t('dependenciesUsed')}</summary>
+            {selectedDetail.dependenciesUsed.length === 0 ? <p className="empty-state">{t('noDependenciesUsed')}</p> : (
+              <div className="chip-list">
+                {selectedDetail.dependenciesUsed.map((dependency) => <span className="workflow-chip" key={dependency}>{dependency}</span>)}
+              </div>
+            )}
+          </details>
+          <details>
             <summary>{t('calledBy')}</summary>
             {selectedDetail.callers.length === 0 ? <p className="empty-state">{t('noCallers')}</p> : (
               <div className="chip-list">
@@ -1851,6 +2654,15 @@ function WorkflowsView({
           </button>
         </aside>
       )}
+      {confirmConversionOpen && selectedWorkflow && conversionResult && (
+        <FlowchartConversionConfirmDialog
+          workflowPath={selectedWorkflow.relativePath}
+          isApplying={conversionApplying}
+          t={t}
+          onCancel={() => setConfirmConversionOpen(false)}
+          onConfirm={() => void handleApplyConversion()}
+        />
+      )}
     </div>
   );
 }
@@ -1862,6 +2674,240 @@ interface WorkflowInvocation {
   sourceActivityId?: string | null;
   isDynamic: boolean;
   targetWorkflow?: ReturnType<typeof getWorkflowHealth>[number];
+}
+
+function FlowchartConversionPanel({
+  result,
+  applyResult,
+  rollbackResult,
+  isApplying,
+  isRollingBack,
+  t,
+  onApply,
+  onRollback,
+}: {
+  result: FlowchartConversionResult;
+  applyResult: FlowchartConversionApplyResult | null;
+  rollbackResult: FlowchartConversionRollbackResult | null;
+  isApplying: boolean;
+  isRollingBack: boolean;
+  t: (key: string, values?: Record<string, unknown>) => string;
+  onApply: () => void;
+  onRollback: () => void;
+}) {
+  const canApply = result.assessment?.conversionLevel === 'Safe';
+  return (
+    <div className="conversion-panel">
+      <div className="metric-grid compact">
+        <Metric label={t('currentStructure')} value={result.structureType} />
+        <Metric label={t('convertibility')} value={localizeFlowchartLevel(result.assessment?.conversionLevel, t)} />
+        <Metric label={t('confidence')} value={localizeFlowchartConfidence(result.assessment?.confidence, t)} />
+        <Metric label={t('nodes')} value={result.graph?.nodes.length ?? 0} />
+        <Metric label={t('decisions')} value={result.graph?.decisions.length ?? 0} />
+        <Metric label={t('switches')} value={result.graph?.switches.length ?? 0} />
+        <Metric label={t('cycles')} value={result.graph?.hasCycles ? t('yes') : t('no')} />
+        <Metric label={t('unreachableNodes')} value={result.graph?.hasUnreachableNodes ? t('yes') : t('no')} />
+      </div>
+
+      <div className="before-after-grid">
+        <section>
+          <h3>{t('currentFlowchart')}</h3>
+          <ul className="compact-list">
+            {(result.graph?.nodes ?? []).slice(0, 12).map((node) => (
+              <li key={node.id}>{node.id} · {node.type} · {node.displayName ?? node.activityName ?? '-'}</li>
+            ))}
+          </ul>
+        </section>
+        <section>
+          <h3>{t('proposedSequence')}</h3>
+          {result.plan?.previewTree ? <PreviewTree node={result.plan.previewTree} /> : <p className="empty-state">{t('noPreviewAvailable')}</p>}
+        </section>
+      </div>
+
+      <details open>
+        <summary>{t('risks')}</summary>
+        {(result.assessment?.risks.length ?? 0) === 0 ? <p className="empty-state">{t('noRisks')}</p> : (
+          <ul>{result.assessment?.risks.map((risk) => <li key={risk}>{risk}</li>)}</ul>
+        )}
+      </details>
+      <details>
+        <summary>{t('unsupportedPatterns')}</summary>
+        {(result.assessment?.unsupportedPatterns.length ?? 0) === 0 ? <p className="empty-state">{t('noUnsupportedPatterns')}</p> : (
+          <ul>{result.assessment?.unsupportedPatterns.map((item) => <li key={item}>{item}</li>)}</ul>
+        )}
+      </details>
+      <details>
+        <summary>{t('conversionMappings')}</summary>
+        <table className="compact-table">
+          <thead><tr><th>{t('sourceNode')}</th><th>{t('targetPath')}</th><th>{t('type')}</th></tr></thead>
+          <tbody>
+            {(result.plan?.mappings ?? []).map((mapping) => (
+              <tr key={`${mapping.sourceNodeId}-${mapping.targetPath}`}>
+                <td>{mapping.sourceNodeId}</td>
+                <td>{mapping.targetPath}</td>
+                <td>{mapping.transformationType}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
+      <section className="conversion-apply-panel">
+        <h3>{t('applyConversion')}</h3>
+        <p className="empty-state">{canApply ? t('conversionApplyWarning') : t('conversionManualReviewOnly')}</p>
+        <div className="conversion-actions">
+          {canApply ? (
+            <button type="button" onClick={onApply} disabled={isApplying || applyResult?.applied === true}>
+              {isApplying ? t('applying') : t('applyConversion')}
+            </button>
+          ) : (
+            <span className="status-badge review">{t('manualReviewRequired')}</span>
+          )}
+          {applyResult?.rollbackAvailable && applyResult.backupId && (
+            <button type="button" onClick={onRollback} disabled={isRollingBack || rollbackResult?.restored === true}>
+              {isRollingBack ? t('rollingBack') : t('rollback')}
+            </button>
+          )}
+        </div>
+        {applyResult && (
+          <div className={`notice ${applyResult.success ? 'success' : 'error'}`}>
+            <strong>{applyResult.success ? t('conversionAppliedSuccessfully') : t('conversionWasNotApplied')}</strong>
+            <p>{applyResult.message}</p>
+            {applyResult.backupId && <p>{t('backupCreated')}: {applyResult.backupId}</p>}
+            {applyResult.requiresReanalysis && <p>{t('projectFilesChangedReanalysis')}</p>}
+          </div>
+        )}
+        {rollbackResult && (
+          <div className={`notice ${rollbackResult.success ? 'success' : 'error'}`}>
+            <strong>{rollbackResult.success ? t('conversionRolledBackSuccessfully') : t('conversionRollbackFailed')}</strong>
+            <p>{rollbackResult.message}</p>
+            {rollbackResult.safetyBackupId && <p>{t('safetyBackupCreated')}: {rollbackResult.safetyBackupId}</p>}
+            {rollbackResult.requiresReanalysis && <p>{t('projectFilesChangedReanalysis')}</p>}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function FlowchartConversionConfirmDialog({
+  workflowPath,
+  isApplying,
+  t,
+  onCancel,
+  onConfirm,
+}: {
+  workflowPath: string;
+  isApplying: boolean;
+  t: (key: string, values?: Record<string, unknown>) => string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={t('applyConversion')}>
+      <div className="modal-card">
+        <h2>{t('applyConversion')}</h2>
+        <p>{t('conversionApplyWarning')}</p>
+        <div className="kv">
+          <div>Workflow</div><div>{workflowPath}</div>
+          <div>{t('currentStructure')}</div><div>Flowchart</div>
+          <div>{t('proposedSequence')}</div><div>Sequence</div>
+        </div>
+        <p className="empty-state">{t('conversionBackupWillBeCreated')}</p>
+        <div className="modal-actions">
+          <button type="button" onClick={onCancel} disabled={isApplying}>{t('cancel')}</button>
+          <button type="button" onClick={onConfirm} disabled={isApplying}>{isApplying ? t('applying') : t('confirmConversion')}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PreviewTree({ node }: { node: FlowchartPreviewNode }) {
+  const label = [node.type, node.displayName, node.condition ? `[${node.condition}]` : null].filter(Boolean).join(' - ');
+  return (
+    <ul className="activity-tree">
+      <li>
+        <span>{label}</span>
+        {(node.children?.length ?? 0) > 0 && (
+          <ul>{node.children?.map((child, index) => <PreviewTree key={`${child.sourceNodeId ?? child.type}-${index}`} node={child} />)}</ul>
+        )}
+      </li>
+    </ul>
+  );
+}
+
+function formatConversionPlan(result: FlowchartConversionResult, t: (key: string, values?: Record<string, unknown>) => string): string {
+  const lines = [
+    `${t('flowchartConversion')}: ${result.workflowPath}`,
+    `${t('currentStructure')}: ${result.structureType}`,
+    `${t('convertibility')}: ${localizeFlowchartLevel(result.assessment?.conversionLevel, t)}`,
+    `${t('confidence')}: ${localizeFlowchartConfidence(result.assessment?.confidence, t)}`,
+    '',
+    t('steps'),
+    ...(result.plan?.steps ?? []).map((step) => `- ${step}`),
+    '',
+    t('risks'),
+    ...((result.assessment?.risks.length ?? 0) === 0 ? [`- ${t('noRisks')}`] : result.assessment!.risks.map((risk) => `- ${risk}`)),
+  ];
+  return lines.join('\n');
+}
+
+function localizeFlowchartLevel(value: string | null | undefined, t: (key: string, values?: Record<string, unknown>) => string): string {
+  if (!value) {
+    return t('unknown');
+  }
+
+  return t(`flowchartLevel${value.replace(/\s/g, '')}`);
+}
+
+function localizeFlowchartConfidence(value: string | null | undefined, t: (key: string, values?: Record<string, unknown>) => string): string {
+  if (!value) {
+    return t('unknown');
+  }
+
+  return t(`flowchartConfidence${value.replace(/\s/g, '')}`);
+}
+
+function copyText(value: string) {
+  if (navigator.clipboard) {
+    void navigator.clipboard.writeText(value);
+  }
+}
+
+function mergeStandaloneResults(current: StandaloneFlowchartAnalysisResult[], next: StandaloneFlowchartAnalysisResult[]): StandaloneFlowchartAnalysisResult[] {
+  const byPath = new Map(current.map((item) => [item.filePath, item]));
+  for (const item of next) {
+    byPath.set(item.filePath, item);
+  }
+
+  return Array.from(byPath.values());
+}
+
+function defaultConvertedPath(sourcePath: string, suggestedFileName?: string): string {
+  const normalized = sourcePath.replace(/\\/g, '/');
+  const directory = normalized.includes('/') ? normalized.slice(0, normalized.lastIndexOf('/')) : '';
+  const fileName = suggestedFileName || `${getFileName(sourcePath).replace(/\.xaml$/i, '')}_Sequence.xaml`;
+  return directory ? `${directory}/${fileName}` : fileName;
+}
+
+function localizeStandaloneFlowchartStatus(status: string | null | undefined, t: (key: string, values?: Record<string, unknown>) => string): string {
+  if (!status) {
+    return t('unknown');
+  }
+
+  return t(`standaloneFlowchartStatus${status}`);
+}
+
+function flowchartStandaloneStatusClass(status: string | null | undefined): string {
+  if (status === 'Ready' || status === 'Converted' || status === 'AlreadySequence') {
+    return 'good';
+  }
+
+  if (status === 'RequiresReview' || status === 'Complex' || status === 'Unsupported') {
+    return 'review';
+  }
+
+  return 'risk';
 }
 
 function buildInvocationGraph(workflows: ReturnType<typeof getWorkflowHealth>): Map<string, WorkflowInvocation[]> {
@@ -1895,6 +2941,7 @@ function buildWorkflowDetail(
   allWorkflows: ReturnType<typeof getWorkflowHealth>,
   findings: Finding[],
   invocationGraph: Map<string, WorkflowInvocation[]>,
+  dependencyAnalysis: DependencySummary | null,
 ) {
   const selectedPath = normalizeWorkflowPath(selected.relativePath);
   const activities = selected.workflow.activities ?? [];
@@ -1905,6 +2952,10 @@ function buildWorkflowDetail(
       .some((invoke) => invoke.targetWorkflow && normalizeWorkflowPath(invoke.targetWorkflow.relativePath) === selectedPath),
   );
   const executableActivities = activities.filter(isExecutableActivity);
+  const dependenciesUsed = (dependencyAnalysis?.packages ?? [])
+    .filter((dependency) => (dependency.usedByWorkflows ?? []).some((workflow) => normalizeWorkflowPath(workflow) === selectedPath))
+    .map((dependency) => dependency.name)
+    .sort((left, right) => left.localeCompare(right));
 
   return {
     activities: activities.filter(isActivityTreeVisible),
@@ -1914,6 +2965,7 @@ function buildWorkflowDetail(
     findings: workflowFindings,
     invoked,
     callers,
+    dependenciesUsed,
     activityTypes: Array.from(executableActivities.reduce((map, activity) => {
       const name = activity.name || 'Activity';
       map.set(name, (map.get(name) ?? 0) + 1);
@@ -2333,6 +3385,7 @@ function ReportCreateDialog({ t, onCancel, onExport }: { t: (key: string, values
         <div className="dialog-actions">
           <button type="button" onClick={onCancel}>{t('cancel')}</button>
           <button type="button" onClick={() => onExport('json')}>JSON</button>
+          <button type="button" onClick={() => onExport('pdf')}>PDF</button>
           <button className="primary-action" type="button" onClick={() => onExport('html')}>{t('createHtmlReport')}</button>
         </div>
       </section>
@@ -2369,6 +3422,16 @@ function getWorkflowType(path: string): string {
   }
 
   return 'Business';
+}
+
+function formatWorkflowStructure(workflow: { structureType?: string; containsFlowchart?: boolean; flowchartCount?: number }, t: (key: string, values?: Record<string, unknown>) => string): string {
+  const structure = workflow.structureType ?? t('unknown');
+  if (!workflow.containsFlowchart || structure === 'Flowchart') {
+    return structure;
+  }
+
+  const count = workflow.flowchartCount && workflow.flowchartCount > 1 ? ` (${workflow.flowchartCount})` : '';
+  return `${structure} + ${t('containsFlowchart')}${count}`;
 }
 
 function estimateWorkflowScore(workflow: ReturnType<typeof getWorkflowHealth>[number]): number {
@@ -2457,6 +3520,9 @@ function conditionFields(): string[] {
     'Project.IsReFramework',
     'Dependency.Name',
     'Dependency.Version',
+    'Dependency.Category',
+    'Dependency.UsageStatus',
+    'Dependency.RiskLevel',
   ];
 }
 

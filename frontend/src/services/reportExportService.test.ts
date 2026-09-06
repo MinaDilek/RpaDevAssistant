@@ -36,6 +36,12 @@ describe('reportExportService', () => {
     expect(fileName).toBe('Invoice-Bot-RPA-Analysis-20260829-2245.html');
   });
 
+  it('creates default PDF report filename', () => {
+    const fileName = createDefaultReportFileName('Invoice Bot', 'pdf', new Date(2026, 7, 29, 22, 45));
+
+    expect(fileName).toBe('Invoice-Bot-RPA-Analysis-20260829-2245.pdf');
+  });
+
   it('sanitizes invalid filename characters', () => {
     expect(sanitizeFileName('Invoice:Bot*?')).toBe('Invoice-Bot');
   });

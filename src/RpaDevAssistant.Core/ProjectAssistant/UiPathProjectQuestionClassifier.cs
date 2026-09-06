@@ -10,6 +10,7 @@ public sealed class UiPathProjectQuestionClassifier : IUiPathProjectQuestionClas
     private static readonly string[] ExceptionPatterns = ["exception", "catch", "throw", "rethrow", "hata"];
     private static readonly string[] ArchitecturePatterns = ["architecture", "reframework", "maintainability", "risk", "risky", "tasarım", "tasarim", "riskli"];
     private static readonly string[] DependencyPatterns = ["dependency", "dependencies", "package", "library", "bağımlılık", "bagimlilik"];
+    private static readonly string[] FlowchartPatterns = ["flowchart", "flow chart", "dönüştürülebilir", "donusturulebilir", "conversion", "sequence"];
     private static readonly string[] SummaryPatterns = ["explain", "summary", "ne yapıyor", "ne yapiyor", "what does"];
 
     public UiPathProjectQuestionIntent Classify(UiPathProjectQuestion request)
@@ -21,6 +22,11 @@ public sealed class UiPathProjectQuestionClassifier : IUiPathProjectQuestionClas
         if (ContainsAny(question, InvocationPatterns) || compact.Contains("invokeworkflow", StringComparison.OrdinalIgnoreCase))
         {
             return UiPathProjectQuestionIntent.InvocationQuery;
+        }
+
+        if (ContainsAny(question, FlowchartPatterns))
+        {
+            return UiPathProjectQuestionIntent.FlowchartQuery;
         }
 
         if (ContainsAny(question, CountPatterns) && question.Contains("workflow", StringComparison.OrdinalIgnoreCase))
@@ -43,7 +49,8 @@ public sealed class UiPathProjectQuestionClassifier : IUiPathProjectQuestionClas
             return UiPathProjectQuestionIntent.ExceptionHandlingQuestion;
         }
 
-        if (ContainsAny(question, DependencyPatterns))
+        if (ContainsAny(question, DependencyPatterns)
+            || (compact.Contains("uipath", StringComparison.OrdinalIgnoreCase) && compact.Contains("activities", StringComparison.OrdinalIgnoreCase)))
         {
             return UiPathProjectQuestionIntent.DependencyQuery;
         }

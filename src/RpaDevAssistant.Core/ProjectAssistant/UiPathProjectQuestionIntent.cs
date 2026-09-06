@@ -9,6 +9,7 @@ public enum UiPathProjectQuestionIntent
     ArchitectureQuestion,
     InvocationQuery,
     DependencyQuery,
+    FlowchartQuery,
     ProjectStatistics,
     ActivityTypeSummary,
     ExceptionHandlingQuestion,

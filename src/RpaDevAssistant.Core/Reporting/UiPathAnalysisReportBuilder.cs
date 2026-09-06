@@ -49,7 +49,8 @@ public sealed class UiPathAnalysisReportBuilder : IUiPathAnalysisReportBuilder
             ScoreBreakdown = qualityScore.ScoreBreakdown.Select(MapScoreBreakdown).ToArray(),
             ComplexityDistribution = BuildComplexityDistribution(projectScan),
             TopComplexWorkflows = projectScan.TopComplexWorkflows.Select(MapWorkflowComplexity).ToArray(),
-            DependencyAnalysis = projectScan.DependencyAnalysis
+            DependencyAnalysis = projectScan.DependencyAnalysis,
+            FlowchartAnalysis = projectScan.FlowchartAnalysis
         };
     }
 

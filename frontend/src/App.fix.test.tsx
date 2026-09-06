@@ -9,6 +9,8 @@ const askProject = vi.fn();
 const getFixSuggestion = vi.fn();
 const applyFix = vi.fn();
 const listBackups = vi.fn();
+const listAnalysisHistory = vi.fn();
+const compareAnalysisSnapshots = vi.fn();
 const undoFix = vi.fn();
 
 vi.mock('./services/apiClient', () => ({
@@ -18,6 +20,8 @@ vi.mock('./services/apiClient', () => ({
   getFixSuggestion: (...args: unknown[]) => getFixSuggestion(...args),
   applyFix: (...args: unknown[]) => applyFix(...args),
   listBackups: (...args: unknown[]) => listBackups(...args),
+  listAnalysisHistory: (...args: unknown[]) => listAnalysisHistory(...args),
+  compareAnalysisSnapshots: (...args: unknown[]) => compareAnalysisSnapshots(...args),
   undoFix: (...args: unknown[]) => undoFix(...args),
   setApiLocale: vi.fn(),
   checkHealth: vi.fn(async () => true),
@@ -52,6 +56,37 @@ describe('App Fix Suggestion UI', () => {
       requiresReanalysis: true,
     });
     listBackups.mockResolvedValue({ backups: [backup()] });
+    listAnalysisHistory.mockResolvedValue({
+      snapshots: [
+        {
+          snapshotId: 'snap-2',
+          generatedAtUtc: '2026-09-05T10:05:00Z',
+          score: 86,
+          grade: 'B',
+          workflowCount: 51,
+          totalActivityCount: 7164,
+          totalFindings: 159,
+          previousSnapshotId: 'snap-1',
+          scoreDelta: 4,
+          totalFindingDelta: -10,
+          newFindingCount: 2,
+          resolvedFindingCount: 12,
+        },
+      ],
+    });
+    compareAnalysisSnapshots.mockResolvedValue({
+      baselineSnapshotId: 'snap-1',
+      targetSnapshotId: 'snap-2',
+      scoreDelta: 4,
+      totalFindingDelta: -10,
+      workflowCountDelta: 0,
+      activityCountDelta: 3,
+      newFindings: [{ state: 'New', finding: { id: 'new-1', ruleId: 'RPA001', ruleName: 'Avoid Delay Activities', severity: 'Warning', category: 'Reliability', workflowPath: 'Main.xaml', message: 'Delay activity detected.' } }],
+      resolvedFindings: [{ state: 'Resolved', finding: { id: 'old-1', ruleId: 'RPA007', ruleName: 'Generic Activity Display Name', severity: 'Suggestion', category: 'Maintainability', workflowPath: 'Login.xaml', message: 'Generic display name.' } }],
+      unchangedFindings: [],
+      changedFindings: [],
+      workflowChanges: [{ workflowPath: 'Main.xaml', activityCountDelta: 3, findingCountDelta: -10, complexityScoreDelta: -2, newFindingCount: 1, resolvedFindingCount: 11 }],
+    });
     undoFix.mockResolvedValue({
       success: true,
       restored: true,
@@ -252,6 +287,28 @@ describe('App Fix Suggestion UI', () => {
     expect(screen.getByText('Main.xaml')).toBeInTheDocument();
     expect(screen.getByText(/Click → Click Login/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /undo/i })).toBeInTheDocument();
+  });
+
+  it('renders analysis history and before-after comparison', async () => {
+    render(<App />);
+    await analyze();
+    await userEvent.click(screen.getByRole('button', { name: /change history/i }));
+
+    expect(screen.getByText('Analysis History')).toBeInTheDocument();
+    expect(screen.getByText(/Score Change: \+4/i)).toBeInTheDocument();
+    expect(screen.getByText(/New Findings: 2/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /compare previous/i }));
+
+    await waitFor(() => expect(compareAnalysisSnapshots).toHaveBeenCalledWith(expect.objectContaining({
+      baselineSnapshotId: 'snap-1',
+      targetSnapshotId: 'snap-2',
+    })));
+    expect(screen.getByText('Before / After Comparison')).toBeInTheDocument();
+    expect(screen.getByText('RPA001')).toBeInTheDocument();
+    expect(screen.getByText('RPA007')).toBeInTheDocument();
+    expect(screen.getAllByText('Main.xaml').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Generic display name/i)).toBeInTheDocument();
   });
 
   it('shows disabled undo reason when backup cannot be undone', async () => {
