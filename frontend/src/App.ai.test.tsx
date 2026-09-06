@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { App } from './main';
@@ -56,16 +56,17 @@ describe('App AI review UI', () => {
   });
 
   it('shows AI review loading state from the project button', async () => {
-    runAiReview.mockImplementation(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 20));
-      return aiResponse();
-    });
+    let resolveAi: (value: unknown) => void = () => {};
+    runAiReview.mockImplementation(() => new Promise((resolve) => { resolveAi = resolve; }));
     render(<App />);
     await analyze();
 
-    await userEvent.click(screen.getByRole('button', { name: /run ai project review/i }));
+    fireEvent.click(screen.getByRole('button', { name: /run ai project review/i }));
 
     expect(screen.getAllByText(/Analyzing with AI/i).length).toBeGreaterThan(0);
+    await act(async () => {
+      resolveAi(aiResponse());
+    });
   });
 
   it('renders AI review result', async () => {

@@ -125,7 +125,7 @@ Kurallar:
 ## 7. Reports
 
 - [x] HTML rapor geliştirmeleri
-- [ ] PDF rapor export
+- [x] PDF rapor export — `PdfUiPathReportExporter` ile C# tarafında saf PDF-1.4 üretimi, unit testler, `/api/uipath/projects/report` endpoint ve frontend dışa aktarım desteği doğrulandı.
 - [ ] Yönetici özeti — Kısmi: report summary/counts var; narrative executive summary yok.
 - [x] Teknik detay raporu
 - [x] Workflow bazlı rapor
@@ -245,16 +245,17 @@ Kurallar:
 - [ ] RPA015 gerçek projede ambiguous finding üretiyor; default profile/severity veya AI-review yönlendirmesi ürün kararıyla netleştirilmeli.
 - [ ] Findings ekranında ayrı bir RuleId/rule dropdown filtresi yok; RuleId araması şu anda global search ile yapılabiliyor.
 - [x] Backend-generated Fix Suggestion title/description/steps/risks için locale-aware contract yok; backend fix suggestion metinleri TR/EN locale ile doğrulandı.
+- [x] Frontend test runner ortamında testler arası localStorage dil durumu sızabiliyordu; testSetup.ts içerisine localStorage temizliği eklendi ve doğrulandı.
 
 ---
 
 ## İnceleme Özeti
 
 **Son inceleme tarihi:** 2026-09-03  
-**İnceleyen:** Codex  
-**Tamamlanan madde sayısı:** 40  
-**Kısmi madde sayısı:** 22  
-**Bekleyen madde sayısı:** 134  
+**İnceleyen:** Jules
+**Tamamlanan madde sayısı:** 75
+**Kısmi madde sayısı:** 17
+**Bekleyen madde sayısı:** 83
 
 ### Notlar
 
