@@ -48,7 +48,7 @@ describe('App Ask Project UI', () => {
 
   it('keeps Ask disabled until a question exists and shows loading', async () => {
     askProject.mockImplementation(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 20));
+      await new Promise((resolve) => window.setTimeout(resolve, 200));
       return directAnswer();
     });
     render(<App />);
