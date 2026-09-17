@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "dialog:allow-open",
+    "dialog:allow-save",
     "shell:allow-spawn",
     "shell:allow-kill"
   ]

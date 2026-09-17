@@ -13,6 +13,9 @@ using RpaDevAssistant.Core.Fixes;
 using RpaDevAssistant.Core.Fixes.Apply;
 using RpaDevAssistant.Core.History;
 using RpaDevAssistant.Core.Localization;
+using RpaDevAssistant.Core.Config;
+using RpaDevAssistant.Core.ProcessUnderstanding;
+using RpaDevAssistant.Api.Services;
 
 namespace RpaDevAssistant.Api.Controllers;
 
@@ -33,6 +36,9 @@ public sealed class UiPathProjectsController : ControllerBase
     private readonly IUiPathUndoService undoService;
     private readonly UiPathAnalysisFindingLocalizer findingLocalizer;
     private readonly IUiPathAnalysisHistoryService analysisHistoryService;
+    private readonly IUiPathConfigAnalysisService configAnalysisService;
+    private readonly ICurrentUiPathAnalysisStore currentAnalysisStore;
+    private readonly IProcessPddAnalysisService processPddAnalysisService;
 
     public UiPathProjectsController(
         IUiPathProjectScanner scanner,
@@ -47,7 +53,10 @@ public sealed class UiPathProjectsController : ControllerBase
         IUiPathBackupRepository backupRepository,
         IUiPathUndoService undoService,
         UiPathAnalysisFindingLocalizer findingLocalizer,
-        IUiPathAnalysisHistoryService analysisHistoryService)
+        IUiPathAnalysisHistoryService analysisHistoryService,
+        IUiPathConfigAnalysisService configAnalysisService,
+        ICurrentUiPathAnalysisStore currentAnalysisStore,
+        IProcessPddAnalysisService processPddAnalysisService)
     {
         this.scanner = scanner;
         this.analyzer = analyzer;
@@ -62,6 +71,71 @@ public sealed class UiPathProjectsController : ControllerBase
         this.undoService = undoService;
         this.findingLocalizer = findingLocalizer;
         this.analysisHistoryService = analysisHistoryService;
+        this.configAnalysisService = configAnalysisService;
+        this.currentAnalysisStore = currentAnalysisStore;
+        this.processPddAnalysisService = processPddAnalysisService;
+    }
+
+    [HttpPost("config/analyze")]
+    public IActionResult AnalyzeConfig([FromBody] AnalyzeUiPathConfigRequest request)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.ProjectPath))
+        {
+            return BadRequest(new { error = "projectPath is required." });
+        }
+
+        if (ContainsInvalidPathCharacters(request.ProjectPath))
+        {
+            return BadRequest(new { error = "projectPath contains invalid path characters." });
+        }
+
+        return Ok(configAnalysisService.Analyze(request.ProjectPath, request.ConfigPath));
+    }
+
+    [HttpPost("config/preview")]
+    public IActionResult PreviewConfigChanges([FromBody] PreviewUiPathConfigChangesRequest request)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.ProjectPath))
+        {
+            return BadRequest(new { error = "projectPath is required." });
+        }
+
+        if (ContainsInvalidPathCharacters(request.ProjectPath))
+        {
+            return BadRequest(new { error = "projectPath contains invalid path characters." });
+        }
+
+        return Ok(configAnalysisService.PreviewChanges(new UiPathConfigChangePreviewRequest
+        {
+            ProjectPath = request.ProjectPath,
+            ConfigPath = request.ConfigPath,
+            RemoveKeys = request.RemoveKeys,
+            Additions = request.Additions
+        }));
+    }
+
+    [HttpPost("config/generate")]
+    public IActionResult GenerateConfig([FromBody] GenerateUiPathConfigRequest request)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.ProjectPath) || string.IsNullOrWhiteSpace(request.OutputPath))
+        {
+            return BadRequest(new { error = "projectPath and outputPath are required." });
+        }
+
+        if (ContainsInvalidPathCharacters(request.ProjectPath) || ContainsInvalidPathCharacters(request.OutputPath))
+        {
+            return BadRequest(new { error = "path contains invalid path characters." });
+        }
+
+        var result = configAnalysisService.Generate(new UiPathConfigGenerateRequest
+        {
+            ProjectPath = request.ProjectPath,
+            ConfigPath = request.ConfigPath,
+            OutputPath = request.OutputPath,
+            RemoveKeys = request.RemoveKeys,
+            Additions = request.Additions
+        });
+        return result.Success ? Ok(result) : BadRequest(result);
     }
 
     [HttpGet("analysis-history")]
@@ -153,6 +227,11 @@ public sealed class UiPathProjectsController : ControllerBase
             return BadRequest(new { error = "projectPath contains invalid path characters." });
         }
 
+        if (!IsPathSafe(request.ProjectPath, request.WorkflowPath))
+        {
+            return BadRequest(new { error = "workflowPath escapes project boundary." });
+        }
+
         var result = await undoService.UndoAsync(new UiPathUndoRequest
         {
             ProjectPath = request.ProjectPath,
@@ -185,6 +264,11 @@ public sealed class UiPathProjectsController : ControllerBase
         if (ContainsInvalidPathCharacters(request.ProjectPath))
         {
             return BadRequest(new { error = "projectPath contains invalid path characters." });
+        }
+
+        if (!IsPathSafe(request.ProjectPath, request.WorkflowPath))
+        {
+            return BadRequest(new { error = "workflowPath escapes project boundary." });
         }
 
         var result = await fixApplier.ApplyAsync(new UiPathFixApplyRequest
@@ -226,6 +310,11 @@ public sealed class UiPathProjectsController : ControllerBase
         if (ContainsInvalidPathCharacters(request.ProjectPath))
         {
             return BadRequest(new { error = "projectPath contains invalid path characters." });
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.WorkflowPath) && !IsPathSafe(request.ProjectPath, request.WorkflowPath))
+        {
+            return BadRequest(new { error = "workflowPath escapes project boundary." });
         }
 
         try
@@ -300,6 +389,11 @@ public sealed class UiPathProjectsController : ControllerBase
             return BadRequest(new { error = "projectPath contains invalid path characters." });
         }
 
+        if (!string.IsNullOrWhiteSpace(request.PreferredWorkflowPath) && !IsPathSafe(request.ProjectPath, request.PreferredWorkflowPath))
+        {
+            return BadRequest(new { error = "preferredWorkflowPath escapes project boundary." });
+        }
+
         try
         {
             var answer = await questionService.AskAsync(new UiPathProjectQuestion
@@ -335,6 +429,11 @@ public sealed class UiPathProjectsController : ControllerBase
         if (ContainsInvalidPathCharacters(request.ProjectPath))
         {
             return BadRequest(new { error = "projectPath contains invalid path characters." });
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.WorkflowPath) && !IsPathSafe(request.ProjectPath, request.WorkflowPath))
+        {
+            return BadRequest(new { error = "workflowPath escapes project boundary." });
         }
 
         var result = await aiReviewService.ReviewAsync(
@@ -383,7 +482,9 @@ public sealed class UiPathProjectsController : ControllerBase
     }
 
     [HttpPost("analyze")]
-    public IActionResult Analyze([FromBody] AnalyzeUiPathProjectRequest request)
+    public async Task<IActionResult> Analyze(
+        [FromBody] AnalyzeUiPathProjectRequest request,
+        CancellationToken cancellationToken)
     {
         if (request is null || string.IsNullOrWhiteSpace(request.ProjectPath))
         {
@@ -397,7 +498,8 @@ public sealed class UiPathProjectsController : ControllerBase
 
         try
         {
-            var result = analyzer.Analyze(request.ProjectPath, request.ProfileId);
+            var result = await analyzer.AnalyzeAsync(request.ProjectPath, request.ProfileId, cancellationToken);
+            currentAnalysisStore.Set(result);
             UiPathAnalysisSnapshotSaveResult? snapshot = null;
             try
             {
@@ -415,6 +517,85 @@ public sealed class UiPathProjectsController : ControllerBase
             return BadRequest(new { error = ex.Message, profileId = ex.ProfileId });
         }
     }
+
+    [HttpPost("process-pdd-analysis")]
+    public IActionResult AnalyzeProcessPdd([FromBody] ProcessPddAnalysisRequest request)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.ProjectPath))
+        {
+            return BadRequest(new { error = "projectPath is required." });
+        }
+
+        if (!currentAnalysisStore.TryGet(request.ProjectPath, out var analysis) || analysis is null)
+        {
+            return Conflict(new
+            {
+                error = string.Equals(request.Locale, "tr", StringComparison.OrdinalIgnoreCase)
+                    ? "Önce analiz edilecek UiPath projesini seçin."
+                    : "Select and analyze a UiPath project first."
+            });
+        }
+
+        try
+        {
+            var document = ReadPddDocument(request, request.Locale);
+            return Ok(processPddAnalysisService.Analyze(analysis, document, request.Locale));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (IOException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return BadRequest(new { error = PddMessage(request.Locale, "The selected PDD could not be read.", "Seçilen PDD okunamadı.") });
+        }
+    }
+
+    private static ProcessPddDocument ReadPddDocument(ProcessPddAnalysisRequest request, string? locale)
+    {
+        const int maximumDocumentCharacters = 2_000_000;
+        var fileName = request.PddFileName;
+        var content = request.PddContent;
+
+        if (!string.IsNullOrWhiteSpace(request.PddPath))
+        {
+            var fullPath = Path.GetFullPath(request.PddPath);
+            if (!System.IO.File.Exists(fullPath)) throw new ArgumentException(PddMessage(locale, "The selected PDD file was not found.", "Seçilen PDD dosyası bulunamadı."));
+            EnsureSupportedPddExtension(fullPath, locale);
+            var file = new FileInfo(fullPath);
+            if (file.Length > maximumDocumentCharacters * 4L) throw new ArgumentException(PddMessage(locale, "The selected PDD is too large for local analysis.", "Seçilen PDD lokal analiz için çok büyük."));
+            fileName = Path.GetFileName(fullPath);
+            content = System.IO.File.ReadAllText(fullPath);
+        }
+        else
+        {
+            EnsureSupportedPddExtension(fileName ?? string.Empty, locale);
+        }
+
+        if (string.IsNullOrWhiteSpace(fileName) || string.IsNullOrWhiteSpace(content))
+        {
+            throw new ArgumentException(PddMessage(locale, "A non-empty PDD document is required.", "Boş olmayan bir PDD dokümanı gereklidir."));
+        }
+        if (content.Length > maximumDocumentCharacters) throw new ArgumentException(PddMessage(locale, "The selected PDD is too large for local analysis.", "Seçilen PDD lokal analiz için çok büyük."));
+
+        return new ProcessPddDocument { FileName = Path.GetFileName(fileName), Content = content };
+    }
+
+    private static void EnsureSupportedPddExtension(string path, string? locale)
+    {
+        var extension = Path.GetExtension(path);
+        if (!extension.Equals(".txt", StringComparison.OrdinalIgnoreCase) && !extension.Equals(".md", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(PddMessage(locale, "This version safely supports TXT and Markdown PDD files only.", "Bu sürüm PDD için güvenli olarak yalnızca TXT ve Markdown dosyalarını destekler."));
+        }
+    }
+
+    private static string PddMessage(string? locale, string english, string turkish) =>
+        string.Equals(locale, "tr", StringComparison.OrdinalIgnoreCase) ? turkish : english;
 
     [HttpPost("report")]
     public IActionResult Report([FromBody] ReportUiPathProjectRequest request)
@@ -449,6 +630,33 @@ public sealed class UiPathProjectsController : ControllerBase
     private static bool ContainsInvalidPathCharacters(string path)
     {
         return path.IndexOfAny(Path.GetInvalidPathChars()) >= 0;
+    }
+
+    private static bool IsPathSafe(string basePath, string? relativeOrChildPath)
+    {
+        if (string.IsNullOrWhiteSpace(relativeOrChildPath))
+        {
+            return true;
+        }
+
+        if (ContainsInvalidPathCharacters(basePath) || ContainsInvalidPathCharacters(relativeOrChildPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            var fullBasePath = Path.GetFullPath(basePath);
+            var combinedPath = Path.GetFullPath(Path.IsPathRooted(relativeOrChildPath)
+                ? relativeOrChildPath
+                : Path.Combine(fullBasePath, relativeOrChildPath));
+
+            return combinedPath.StartsWith(fullBasePath, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static bool TryParseFormat(string? value, out UiPathReportExportFormat format)

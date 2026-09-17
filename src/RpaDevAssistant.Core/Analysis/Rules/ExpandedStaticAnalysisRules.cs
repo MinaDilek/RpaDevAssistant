@@ -308,6 +308,86 @@ public sealed class ExcessiveContinueOnErrorUsageRule : UiPathAnalysisRuleBase
     }
 }
 
+public sealed class BusinessRuleExceptionHandlingRule : UiPathAnalysisRuleBase
+{
+    public override string Id => "RPA030";
+
+    public override string Name => "BusinessRuleException Handling";
+
+    public override string Description => "Detects BusinessRuleException catch blocks that do not visibly log, rethrow, or update transaction status.";
+
+    public override RuleSeverity Severity => RuleSeverity.Warning;
+
+    public override RuleCategory Category => RuleCategory.ExceptionHandling;
+
+    public override IEnumerable<UiPathAnalysisFinding> Analyze(UiPathAnalysisContext context)
+    {
+        foreach (var workflow in context.WorkflowAnalyses)
+        {
+            foreach (var catchActivity in workflow.Activities.Where(IsBusinessRuleExceptionCatch))
+            {
+                var descendants = UiPathActivityClassifier.DescendantsOf(workflow, catchActivity);
+                if (!descendants.Any(UiPathActivityClassifier.IsExecutable))
+                {
+                    continue;
+                }
+
+                if (HasVisibleBusinessRuleHandling(descendants))
+                {
+                    continue;
+                }
+
+                yield return CreateFinding(
+                    "BusinessRuleException catch does not visibly log, rethrow, or update transaction status.",
+                    "Log the business exception context and update transaction status intentionally, or rethrow when the workflow should not continue.",
+                    workflow,
+                    catchActivity,
+                    "TypeArguments",
+                    ReadCatchType(catchActivity));
+            }
+        }
+    }
+
+    private static bool IsBusinessRuleExceptionCatch(UiPathActivityInfo activity)
+    {
+        return UiPathActivityClassifier.IsNamed(activity, "Catch") &&
+            ReadCatchType(activity)?.Contains("BusinessRuleException", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    private static string? ReadCatchType(UiPathActivityInfo activity)
+    {
+        return UiPathPropertyLookup.TryGet(activity, out var type, "TypeArguments")
+            ? type
+            : null;
+    }
+
+    private static bool HasVisibleBusinessRuleHandling(IEnumerable<UiPathActivityInfo> descendants)
+    {
+        foreach (var activity in descendants)
+        {
+            if (UiPathActivityClassifier.IsNamed(activity, "LogMessage", "Throw", "Rethrow"))
+            {
+                return true;
+            }
+
+            if (!UiPathActivityClassifier.IsNamed(activity, "InvokeWorkflowFile", "Invoke Workflow File"))
+            {
+                continue;
+            }
+
+            if (UiPathPropertyLookup.TryGet(activity, out var workflowFileName, "WorkflowFileName", "WorkflowFile", "FileName") &&
+                !string.IsNullOrWhiteSpace(workflowFileName) &&
+                (workflowFileName.Contains("SetTransactionStatus", StringComparison.OrdinalIgnoreCase) ||
+                 workflowFileName.Contains("BusinessRule", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+
 public sealed class MissingExplicitTimeoutOnCriticalUiActivityRule : UiPathAnalysisRuleBase
 {
     public override string Id => "RPA015";
@@ -363,10 +443,11 @@ public sealed class LegacyUiAutomationActivityRule : UiPathAnalysisRuleBase
 
     public override IEnumerable<UiPathAnalysisFinding> Analyze(UiPathAnalysisContext context)
     {
-        var compatibility = context.Project.Compatibility ?? string.Empty;
-        var modernProject = compatibility.Contains("Windows", StringComparison.OrdinalIgnoreCase) ||
-            compatibility.Contains("Modern", StringComparison.OrdinalIgnoreCase);
-        if (!modernProject)
+        var behavior = context.Project.CompatibilityBehavior ??
+            new RpaDevAssistant.Core.Compatibility.UiPathCompatibilityResolver().Resolve(
+                context.Project.Compatibility,
+                context.Project.DependencyAnalysis?.ModernClassicMode ?? RpaDevAssistant.Core.Dependencies.UiPathModernClassicMode.Unknown);
+        if (!behavior.FlagLegacyUiActivities)
         {
             yield break;
         }
@@ -578,6 +659,103 @@ public sealed class HardCodedAbsoluteFilePathRule : UiPathAnalysisRuleBase
         }
 
         path = match.Groups[1].Value;
+        return true;
+    }
+}
+
+public sealed class HardCodedUrlRule : UiPathAnalysisRuleBase
+{
+    private static readonly Regex UrlRegex = new(
+        @"https?:\/\/[^\s""'<>]+",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly string[] ExcludedUrlPrefixes =
+    [
+        "http://schemas.microsoft.com",
+        "https://schemas.microsoft.com",
+        "http://schemas.uipath.com",
+        "https://schemas.uipath.com",
+        "http://www.w3.org",
+        "https://www.w3.org",
+        "http://schemas.datacontract.org",
+        "https://schemas.datacontract.org"
+    ];
+
+    private readonly IUiPathExpressionClassifier expressionClassifier;
+
+    public HardCodedUrlRule(IUiPathExpressionClassifier expressionClassifier)
+    {
+        this.expressionClassifier = expressionClassifier;
+    }
+
+    public override string Id => "RPA035";
+
+    public override string Name => "Hard-Coded URL";
+
+    public override string Description => "Detects hard-coded HTTP or HTTPS endpoint URLs in workflow properties.";
+
+    public override RuleSeverity Severity => RuleSeverity.Warning;
+
+    public override RuleCategory Category => RuleCategory.Configuration;
+
+    public override IEnumerable<UiPathAnalysisFinding> Analyze(UiPathAnalysisContext context)
+    {
+        foreach (var workflow in context.WorkflowAnalyses)
+        {
+            foreach (var activity in workflow.Activities)
+            {
+                foreach (var property in UiPathPropertyLookup.AllProperties(activity))
+                {
+                    if (!TryFindHardCodedUrl(property.Value, out var url))
+                    {
+                        continue;
+                    }
+
+                    yield return CreateFinding(
+                        "Hard-coded URL detected.",
+                        "Move endpoint URLs to configuration or assets.",
+                        workflow,
+                        activity,
+                        property.Key,
+                        url);
+                }
+            }
+        }
+    }
+
+    private bool TryFindHardCodedUrl(string? value, out string? url)
+    {
+        url = null;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var classification = expressionClassifier.Classify(value);
+        if (classification.Kind is UiPathExpressionKind.ConfigReference or UiPathExpressionKind.VariableReference)
+        {
+            return false;
+        }
+
+        var unwrapped = UiPathExpressionClassifier.UnwrapExpression(value.Trim());
+        if (unwrapped.Contains("Config(", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var match = UrlRegex.Match(unwrapped);
+        if (!match.Success)
+        {
+            return false;
+        }
+
+        var candidate = match.Value;
+        if (ExcludedUrlPrefixes.Any(prefix => candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        url = candidate;
         return true;
     }
 }

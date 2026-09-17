@@ -16,6 +16,8 @@ public sealed record UiPathStandaloneFlowchartConvertRequest
     public string? ExpectedWorkflowHash { get; init; }
 
     public bool Confirmed { get; init; }
+
+    public bool ReplaceCustomActivitiesWithUiPathStandard { get; init; }
 }
 
 public sealed record UiPathStandaloneFlowchartAnalysisResult
@@ -49,6 +51,8 @@ public sealed record UiPathStandaloneFlowchartAnalysisResult
     public UiPathFlowchartConversionAssessment? Assessment { get; init; }
 
     public UiPathFlowchartConversionPlan? Plan { get; init; }
+
+    public IReadOnlyList<UiPathCustomActivityDetection> CustomActivityDetections { get; init; } = [];
 
     public string? WorkflowHash { get; init; }
 

@@ -24,11 +24,21 @@ public sealed record UiPathRuleDefinition
 
     public bool IsBuiltIn { get; init; } = true;
 
+    public bool IsTemplate { get; init; }
+
+    public string? TemplateId { get; init; }
+
+    public string? TemplateSource { get; init; }
+
     public bool SupportsFixSuggestion { get; init; }
 
     public bool SupportsAggregation { get; init; }
 
     public IReadOnlyList<string> Tags { get; init; } = [];
+
+    public IReadOnlyList<string> ApplicableProjectTypes { get; init; } = [];
+
+    public string? CompatibilityNotesKey { get; init; }
 
     public string? CustomName { get; init; }
 

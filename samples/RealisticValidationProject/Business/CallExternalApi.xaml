@@ -30,6 +30,15 @@
               <Sequence DisplayName="Empty catch" />
             </ActivityAction>
           </Catch>
+          <Catch x:TypeArguments="ui:BusinessRuleException">
+            <ActivityAction x:TypeArguments="ui:BusinessRuleException">
+              <Sequence DisplayName="Handle business exception">
+                <Sequence.Activities>
+                  <Assign DisplayName="Mark business exception handled" />
+                </Sequence.Activities>
+              </Sequence>
+            </ActivityAction>
+          </Catch>
         </TryCatch.Catches>
       </TryCatch>
       <ui:InvokeWorkflowFile DisplayName="Invoke missing cleanup" WorkflowFileName="Framework\MissingCleanup.xaml" />

@@ -20,6 +20,10 @@ public sealed class UiPathAnalysisReportTests
         Assert.Equal(1, report.Summary.ErrorCount);
         Assert.Equal(1, report.Summary.WarningCount);
         Assert.Equal(2, report.Summary.WorkflowsWithFindings);
+        Assert.Equal("High", report.Summary.ExecutiveSummary.RiskLevel);
+        Assert.Equal(1, report.Summary.ExecutiveSummary.CriticalAndErrorFindings);
+        Assert.Equal("Business.xaml", report.Summary.ExecutiveSummary.MostAffectedWorkflow);
+        Assert.Contains("RPA002", report.Summary.ExecutiveSummary.PriorityRuleIds);
     }
 
     [Fact]
@@ -91,6 +95,21 @@ public sealed class UiPathAnalysisReportTests
         Assert.StartsWith("<!doctype html>", export.Content, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("<style>", export.Content, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("UiPath Project Analysis Report", export.Content, StringComparison.Ordinal);
+        Assert.Contains("Executive Summary", export.Content, StringComparison.Ordinal);
+        Assert.Contains("Overall risk", export.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HtmlExporter_LocalizesExecutiveSummaryInTurkish()
+    {
+        var export = new HtmlUiPathReportExporter().Export(
+            BuildReport(Findings(Finding("RPA002", RuleSeverity.Error, "Main.xaml"))),
+            "tr");
+
+        var decoded = System.Net.WebUtility.HtmlDecode(export.Content);
+        Assert.Contains("Yönetici Özeti", decoded, StringComparison.Ordinal);
+        Assert.Contains("Genel risk Yüksek", decoded, StringComparison.Ordinal);
+        Assert.Contains("Main.xaml", decoded, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -288,6 +288,20 @@ describe('App workflow detail and localization', () => {
     expect(screen.getAllByText(/Generic activity DisplayName/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Workflow içinde generic activity DisplayName/i)).toBeInTheDocument();
   });
+
+  it('renders split resize handle and closes drawer with Escape key', async () => {
+    render(<App />);
+    await analyze();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Workflows' }));
+    await userEvent.click(screen.getByText('Main.xaml'));
+
+    expect(screen.getByText('Workflow detail')).toBeInTheDocument();
+    expect(screen.getByRole('separator', { name: 'Resize panel' })).toBeInTheDocument();
+
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByText('Workflow detail')).not.toBeInTheDocument();
+  });
 });
 
 async function analyze() {

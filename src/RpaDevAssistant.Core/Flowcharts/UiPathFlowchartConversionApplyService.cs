@@ -88,7 +88,7 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
             return Reject(workflowPath, "Only Safe Flowchart conversions can be applied automatically.", "conversion_not_safe", Error("Only Safe Flowchart conversions can be applied automatically."));
         }
 
-        var generation = GenerateSequenceWorkflow(workflowFullPath, preview.Graph!);
+        var generation = GenerateSequenceWorkflow(workflowFullPath, preview.Graph!, request.ReplaceCustomActivitiesWithUiPathStandard);
         if (!generation.Validation.IsValid || generation.Content is null)
         {
             return Reject(workflowPath, "Converted XAML could not be generated safely.", "generation_failed", generation.Validation);
@@ -101,7 +101,7 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
         try
         {
             await File.WriteAllTextAsync(tempPath, generation.Content, encoding.Encoding, cancellationToken).ConfigureAwait(false);
-            var tempValidation = ValidateGeneratedWorkflow(projectPath, workflowPath, tempPath, preview.Graph!, expectedStructure: UiPathWorkflowStructureType.Sequence, requireProjectScan: true);
+            var tempValidation = ValidateGeneratedWorkflow(projectPath, workflowPath, tempPath, preview.Graph!, expectedStructure: UiPathWorkflowStructureType.Sequence, requireProjectScan: true, replaceCustomActivities: request.ReplaceCustomActivitiesWithUiPathStandard);
             if (!tempValidation.IsValid)
             {
                 TryDelete(tempPath);
@@ -126,7 +126,7 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
             }
 
             File.Move(tempPath, workflowFullPath, overwrite: true);
-            var postValidation = ValidateGeneratedWorkflow(projectPath, workflowPath, workflowFullPath, preview.Graph!, expectedStructure: UiPathWorkflowStructureType.Sequence, requireProjectScan: true);
+            var postValidation = ValidateGeneratedWorkflow(projectPath, workflowPath, workflowFullPath, preview.Graph!, expectedStructure: UiPathWorkflowStructureType.Sequence, requireProjectScan: true, replaceCustomActivities: request.ReplaceCustomActivitiesWithUiPathStandard);
             if (!postValidation.IsValid)
             {
                 RestoreOriginal(backup?.BackupFilePath, workflowFullPath);
@@ -239,14 +239,15 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
         string projectPath,
         string workflowPath,
         UiPathFlowchartGraph graph,
-        UiPathWorkflowStructureType expectedRootStructure = UiPathWorkflowStructureType.Sequence)
+        UiPathWorkflowStructureType expectedRootStructure = UiPathWorkflowStructureType.Sequence,
+        bool replaceCustomActivities = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workflowFullPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(projectPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(workflowPath);
         ArgumentNullException.ThrowIfNull(graph);
 
-        var generation = GenerateSequenceWorkflow(workflowFullPath, graph);
+        var generation = GenerateSequenceWorkflow(workflowFullPath, graph, replaceCustomActivities);
         if (!generation.Validation.IsValid || generation.Content is null)
         {
             return generation;
@@ -256,7 +257,7 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
         try
         {
             File.WriteAllText(tempPath, generation.Content, UiPathFileEncodingDetector.Detect(workflowFullPath).Encoding);
-            var validation = ValidateGeneratedWorkflow(projectPath, workflowPath, tempPath, graph, expectedStructure: expectedRootStructure, requireProjectScan: false);
+            var validation = ValidateGeneratedWorkflow(projectPath, workflowPath, tempPath, graph, expectedStructure: expectedRootStructure, requireProjectScan: false, replaceCustomActivities: replaceCustomActivities);
             return generation with { Validation = validation };
         }
         finally
@@ -265,7 +266,7 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
         }
     }
 
-    private static UiPathFlowchartGeneratedContent GenerateSequenceWorkflow(string workflowFullPath, UiPathFlowchartGraph graph)
+    private static UiPathFlowchartGeneratedContent GenerateSequenceWorkflow(string workflowFullPath, UiPathFlowchartGraph graph, bool replaceCustomActivities = false)
     {
         var validation = new UiPathFixApplyValidationResult();
         XDocument document;
@@ -284,17 +285,105 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
             return new UiPathFlowchartGeneratedContent(null, Error("Current workflow no longer contains a Flowchart."), []);
         }
 
-        var conversion = new XmlFlowchartConverter(flowchart, graph).BuildSequence();
+        var conversion = new XmlFlowchartConverter(flowchart, graph, replaceCustomActivities).BuildSequence();
         if (!conversion.Validation.IsValid || conversion.Sequence is null)
         {
             return new UiPathFlowchartGeneratedContent(null, conversion.Validation, conversion.Warnings);
         }
 
-        flowchart.ReplaceWith(conversion.Sequence);
+        conversion.Sequence.DescendantsAndSelf()
+            .Where(element => UiPathFlowchartConversionPolicy.IsCommentedCodeBlock(element.Name.LocalName)
+                              || UiPathFlowchartConversionPolicy.IsCommentedCodeBlock(XmlFlowchartConverter.ReadAttribute(element, "DisplayName")))
+            .ToList()
+            .ForEach(element => element.Remove());
+        conversion.Sequence.DescendantNodes().OfType<XComment>().Remove();
+
+        if (replaceCustomActivities)
+        {
+            var uiNs = XNamespace.Get("http://schemas.uipath.com/workflow/activities");
+            if (document.Root is not null && document.Root.Attribute(XNamespace.Xmlns + "ui") is null)
+            {
+                document.Root.SetAttributeValue(XNamespace.Xmlns + "ui", uiNs.NamespaceName);
+            }
+        }
+
+        if (flowchart == document.Root)
+        {
+            document.Root.ReplaceWith(conversion.Sequence);
+        }
+        else
+        {
+            flowchart.ReplaceWith(conversion.Sequence);
+        }
+
+        EnsureWorkflowNamespacesAndReferences(document);
+
         return new UiPathFlowchartGeneratedContent(document.ToString(SaveOptions.DisableFormatting), validation, conversion.Warnings);
     }
 
-    private UiPathFixApplyValidationResult ValidateGeneratedWorkflow(string projectPath, string workflowPath, string generatedPath, UiPathFlowchartGraph originalGraph, UiPathWorkflowStructureType expectedStructure, bool requireProjectScan)
+    private static void EnsureWorkflowNamespacesAndReferences(XDocument document)
+    {
+        var root = document.Root;
+        if (root is null) return;
+
+        var hasWebActivities = document.Descendants().Any(e =>
+            e.Name.LocalName is "HttpClient" or "DeserializeJson" or "DeserializeXml" or "DeserializeJsonArray");
+
+        if (hasWebActivities)
+        {
+            var uiNs = XNamespace.Get("http://schemas.uipath.com/workflow/activities");
+            if (root.Attribute(XNamespace.Xmlns + "ui") is null)
+            {
+                root.SetAttributeValue(XNamespace.Xmlns + "ui", uiNs.NamespaceName);
+            }
+
+            var namespacesCollection = root.Descendants()
+                .FirstOrDefault(e => e.Name.LocalName.EndsWith("NamespacesForImplementation", StringComparison.OrdinalIgnoreCase))?
+                .Elements()
+                .FirstOrDefault(e => e.Name.LocalName == "Collection");
+
+            if (namespacesCollection is not null)
+            {
+                var xNs = XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml");
+                var existingNamespaces = namespacesCollection.Elements()
+                    .Where(e => e.Name.LocalName == "String")
+                    .Select(e => e.Value.Trim())
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                if (!existingNamespaces.Contains("UiPath.WebAPI.Activities"))
+                {
+                    namespacesCollection.Add(new XElement(xNs + "String", "UiPath.WebAPI.Activities"));
+                }
+            }
+
+            var referencesCollection = root.Descendants()
+                .FirstOrDefault(e => e.Name.LocalName.EndsWith("ReferencesForImplementation", StringComparison.OrdinalIgnoreCase))?
+                .Elements()
+                .FirstOrDefault(e => e.Name.LocalName == "Collection");
+
+            if (referencesCollection is not null)
+            {
+                var existingReferences = referencesCollection.Elements()
+                    .Where(e => e.Name.LocalName == "AssemblyReference")
+                    .Select(e => e.Value.Trim())
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                if (!existingReferences.Contains("UiPath.WebAPI.Activities"))
+                {
+                    referencesCollection.Add(new XElement(root.Name.Namespace + "AssemblyReference", "UiPath.WebAPI.Activities"));
+                }
+            }
+        }
+    }
+
+    private UiPathFixApplyValidationResult ValidateGeneratedWorkflow(
+        string projectPath,
+        string workflowPath,
+        string generatedPath,
+        UiPathFlowchartGraph originalGraph,
+        UiPathWorkflowStructureType expectedStructure,
+        bool requireProjectScan,
+        bool replaceCustomActivities = false)
     {
         var result = new UiPathFixApplyValidationResult();
         UiPathWorkflowAnalysis parsed;
@@ -318,13 +407,37 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
             result.Errors.Add($"Generated workflow root is {parsed.StructureType}; expected {expectedStructure}.");
         }
 
-        foreach (var expected in originalGraph.Nodes.Where(node => !string.IsNullOrWhiteSpace(node.ActivityName) && node.Type == UiPathFlowNodeType.Activity))
+        var customDetections = replaceCustomActivities
+            ? originalGraph.Nodes
+                .Where(UiPathCustomActivityReplacementResolver.IsCustomActivity)
+                .Select(UiPathCustomActivityReplacementResolver.CreateDetection)
+                .ToDictionary(d => d.NodeId, Comparer)
+            : [];
+
+        foreach (var expected in originalGraph.Nodes.Where(node =>
+                     !string.IsNullOrWhiteSpace(node.ActivityName)
+                     && node.Type == UiPathFlowNodeType.Activity
+                     && !UiPathFlowchartConversionPolicy.IsCommentedCodeBlock(node)))
         {
-            if (!parsed.Activities.Any(activity =>
-                activity.Name.Equals(expected.ActivityName, StringComparison.OrdinalIgnoreCase)
-                && (string.IsNullOrWhiteSpace(expected.DisplayName) || activity.DisplayName.Equals(expected.DisplayName, StringComparison.Ordinal))))
+            if (replaceCustomActivities && customDetections.TryGetValue(expected.Id, out var detection))
             {
-                result.Errors.Add($"Preserved activity could not be resolved after conversion: {expected.DisplayName ?? expected.ActivityName}.");
+                var expectedLocal = detection.SuggestedUiPathActivity.Contains(':')
+                    ? detection.SuggestedUiPathActivity.Split(':')[1]
+                    : detection.SuggestedUiPathActivity;
+                if (!parsed.Activities.Any(activity =>
+                    activity.Name.Equals(expectedLocal, StringComparison.OrdinalIgnoreCase)))
+                {
+                    result.Errors.Add($"Replaced custom activity could not be resolved after conversion: {detection.SuggestedUiPathActivity}.");
+                }
+            }
+            else
+            {
+                if (!parsed.Activities.Any(activity =>
+                    activity.Name.Equals(expected.ActivityName, StringComparison.OrdinalIgnoreCase)
+                    && (string.IsNullOrWhiteSpace(expected.DisplayName) || activity.DisplayName.Equals(expected.DisplayName, StringComparison.Ordinal))))
+                {
+                    result.Errors.Add($"Preserved activity could not be resolved after conversion: {expected.DisplayName ?? expected.ActivityName}.");
+                }
             }
         }
 
@@ -451,19 +564,31 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
 
     private sealed class XmlFlowchartConverter
     {
+        private static readonly XNamespace Sap2010Namespace = "http://schemas.microsoft.com/netfx/2010/xaml/activities/presentation";
+        private static readonly XNamespace XamlNamespace = "http://schemas.microsoft.com/winfx/2006/xaml";
         private readonly XElement flowchart;
         private readonly UiPathFlowchartGraph graph;
+        private readonly bool replaceCustomActivities;
+        private readonly Dictionary<string, UiPathCustomActivityDetection> customDetectionsById;
         private readonly Dictionary<string, XElement> elementsById;
         private readonly Dictionary<string, UiPathFlowNode> nodesById;
         private readonly Dictionary<string, UiPathFlowEdge[]> edgesBySource;
         private readonly Dictionary<string, int> incomingCount;
         private readonly HashSet<string> emitted = new(Comparer);
         private readonly List<string> warnings = [];
+        private readonly HashSet<string> usedIdRefs;
 
-        public XmlFlowchartConverter(XElement flowchart, UiPathFlowchartGraph graph)
+        public XmlFlowchartConverter(XElement flowchart, UiPathFlowchartGraph graph, bool replaceCustomActivities = false)
         {
             this.flowchart = flowchart;
             this.graph = graph;
+            this.replaceCustomActivities = replaceCustomActivities;
+            customDetectionsById = replaceCustomActivities
+                ? graph.Nodes
+                    .Where(UiPathCustomActivityReplacementResolver.IsCustomActivity)
+                    .Select(UiPathCustomActivityReplacementResolver.CreateDetection)
+                    .ToDictionary(detection => detection.NodeId, Comparer)
+                : new Dictionary<string, UiPathCustomActivityDetection>(Comparer);
             elementsById = flowchart.Descendants()
                 .Where(IsFlowNodeElement)
                 .Select(element => new { Id = ReadNodeId(element), Element = element })
@@ -473,6 +598,24 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
             nodesById = graph.Nodes.ToDictionary(node => node.Id, Comparer);
             edgesBySource = graph.Edges.GroupBy(edge => edge.SourceNodeId, Comparer).ToDictionary(group => group.Key, group => group.ToArray(), Comparer);
             incomingCount = graph.Edges.GroupBy(edge => edge.TargetNodeId, Comparer).ToDictionary(group => group.Key, group => group.Count(), Comparer);
+            usedIdRefs = new HashSet<string>(
+                flowchart.Document?.Descendants()
+                    .Select(e => ReadAttribute(e, "WorkflowViewState.IdRef") ?? ReadAttribute(e, "IdRef"))
+                    .Where(id => !string.IsNullOrWhiteSpace(id))!
+                    .Select(id => id!) ?? [],
+                StringComparer.OrdinalIgnoreCase);
+        }
+
+        private string NextIdRef(string prefix)
+        {
+            var counter = 1;
+            while (usedIdRefs.Contains($"{prefix}_{counter}"))
+            {
+                counter++;
+            }
+            var id = $"{prefix}_{counter}";
+            usedIdRefs.Add(id);
+            return id;
         }
 
         public XmlFlowchartConversionResult BuildSequence()
@@ -487,6 +630,18 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
             var sequence = new XElement(flowchart.Name.Namespace + "Sequence");
             CopySafeAttributes(flowchart, sequence);
             sequence.SetAttributeValue("DisplayName", ReadAttribute(flowchart, "DisplayName") ?? Path.GetFileNameWithoutExtension(graph.WorkflowPath));
+            sequence.SetAttributeValue(Sap2010Namespace + "WorkflowViewState.IdRef", NextIdRef("Sequence"));
+
+            var flowchartVariables = flowchart.Elements().FirstOrDefault(e => e.Name.LocalName.EndsWith(".Variables", StringComparison.OrdinalIgnoreCase));
+            if (flowchartVariables is not null && flowchartVariables.HasElements)
+            {
+                var seqVariables = new XElement(flowchart.Name.Namespace + "Sequence.Variables");
+                foreach (var variable in flowchartVariables.Elements())
+                {
+                    seqVariables.Add(new XElement(variable));
+                }
+                sequence.Add(seqVariables);
+            }
 
             foreach (var child in BuildContinuation(graph.StartNodeId))
             {
@@ -495,7 +650,8 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
 
             var reviewSequence = new XElement(flowchart.Name.Namespace + "Sequence");
             reviewSequence.SetAttributeValue("DisplayName", "Review Required - Unmapped Flowchart Nodes");
-            foreach (var missing in graph.Nodes.Where(node => !emitted.Contains(node.Id)).ToArray())
+            reviewSequence.SetAttributeValue(Sap2010Namespace + "WorkflowViewState.IdRef", NextIdRef("Sequence"));
+            foreach (var missing in graph.Nodes.Where(node => !emitted.Contains(node.Id) && !UiPathFlowchartConversionPolicy.IsCommentedCodeBlock(node)).ToArray())
             {
                 warnings.Add($"Flow node was not emitted in the generated Sequence: {missing.Id}.");
                 var activity = CloneActivity(missing.Id);
@@ -511,7 +667,9 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
                 sequence.Add(reviewSequence);
             }
 
-            if (!sequence.HasElements && graph.Nodes.Any(node => node.Type == UiPathFlowNodeType.Activity))
+            if (!sequence.HasElements && graph.Nodes.Any(node =>
+                    node.Type == UiPathFlowNodeType.Activity
+                    && !UiPathFlowchartConversionPolicy.IsCommentedCodeBlock(node)))
             {
                 validation.Errors.Add("No executable activities could be emitted from the Flowchart.");
             }
@@ -525,6 +683,12 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
             var guard = 0;
             while (!string.IsNullOrWhiteSpace(current) && nodesById.TryGetValue(current, out var node) && emitted.Add(current) && guard++ < graph.Nodes.Count + 5)
             {
+                if (UiPathFlowchartConversionPolicy.IsCommentedCodeBlock(node))
+                {
+                    current = NextContinuation(node);
+                    continue;
+                }
+
                 foreach (var built in BuildNode(node))
                 {
                     yield return built;
@@ -544,11 +708,29 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
                 {
                     var whileElement = new XElement(flowchart.Name.Namespace + "While");
                     whileElement.SetAttributeValue("DisplayName", node.DisplayName ?? "While");
-                    whileElement.SetAttributeValue("Condition", loopBranch.BranchType == UiPathFlowBranchType.False
-                        ? $"Not ({node.Properties.GetValueOrDefault("Condition")})"
-                        : node.Properties.GetValueOrDefault("Condition") ?? string.Empty);
+                    whileElement.SetAttributeValue(Sap2010Namespace + "WorkflowViewState.IdRef", NextIdRef("While"));
+
+                    var rawCondition = node.Properties.GetValueOrDefault("Condition")?.Trim() ?? string.Empty;
+                    string conditionExpr;
+                    if (loopBranch.BranchType == UiPathFlowBranchType.False)
+                    {
+                        var inner = rawCondition.StartsWith('[') && rawCondition.EndsWith(']')
+                            ? rawCondition[1..^1].Trim()
+                            : rawCondition;
+                        conditionExpr = $"[Not ({inner})]";
+                    }
+                    else
+                    {
+                        conditionExpr = rawCondition.StartsWith('[') && rawCondition.EndsWith(']')
+                            ? rawCondition
+                            : $"[{rawCondition}]";
+                    }
+
+                    var conditionElement = new XElement(flowchart.Name.Namespace + "While.Condition", conditionExpr);
+                    whileElement.Add(conditionElement);
 
                     var body = new XElement(flowchart.Name.Namespace + "Sequence");
+                    body.SetAttributeValue(Sap2010Namespace + "WorkflowViewState.IdRef", NextIdRef("Sequence"));
                     foreach (var child in BuildBranch(loopBranch.TargetNodeId, allowSharedStart: true))
                     {
                         body.Add(child);
@@ -561,6 +743,7 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
 
                 var ifElement = new XElement(flowchart.Name.Namespace + "If");
                 ifElement.SetAttributeValue("DisplayName", node.DisplayName ?? "If");
+                ifElement.SetAttributeValue(Sap2010Namespace + "WorkflowViewState.IdRef", NextIdRef("If"));
                 ifElement.SetAttributeValue("Condition", node.Properties.GetValueOrDefault("Condition") ?? string.Empty);
 
                 var trueTarget = branches.FirstOrDefault(edge => edge.BranchType == UiPathFlowBranchType.True)?.TargetNodeId;
@@ -575,6 +758,7 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
             {
                 var switchElement = new XElement(flowchart.Name.Namespace + "Switch");
                 switchElement.SetAttributeValue("DisplayName", node.DisplayName ?? "Switch");
+                switchElement.SetAttributeValue(Sap2010Namespace + "WorkflowViewState.IdRef", NextIdRef("Switch"));
                 switchElement.SetAttributeValue("Expression", node.Properties.GetValueOrDefault("Expression") ?? string.Empty);
                 foreach (var edge in Branches(node.Id))
                 {
@@ -585,6 +769,7 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
                     }
 
                     var body = new XElement(flowchart.Name.Namespace + "Sequence");
+                    body.SetAttributeValue(Sap2010Namespace + "WorkflowViewState.IdRef", NextIdRef("Sequence"));
                     foreach (var child in BuildBranch(edge.TargetNodeId))
                     {
                         body.Add(child);
@@ -614,6 +799,7 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
 
             var wrapper = new XElement(flowchart.Name.Namespace + wrapperName);
             var sequence = new XElement(flowchart.Name.Namespace + "Sequence");
+            sequence.SetAttributeValue(Sap2010Namespace + "WorkflowViewState.IdRef", NextIdRef("Sequence"));
             foreach (var child in BuildBranch(targetNodeId))
             {
                 sequence.Add(child);
@@ -644,6 +830,11 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
                 return null;
             }
 
+            if (nodesById.TryGetValue(nodeId, out var flowNodeModel) && UiPathFlowchartConversionPolicy.IsCommentedCodeBlock(flowNodeModel))
+            {
+                return null;
+            }
+
             var activity = flowNode.Elements()
                 .FirstOrDefault(child => !child.Name.LocalName.Contains('.', StringComparison.Ordinal) && !IsFlowNodeElement(child));
             if (activity is null)
@@ -652,7 +843,30 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
                 return null;
             }
 
-            return new XElement(activity);
+            if (UiPathFlowchartConversionPolicy.IsCommentedCodeBlock(activity.Name.LocalName)
+                || UiPathFlowchartConversionPolicy.IsCommentedCodeBlock(ReadAttribute(activity, "DisplayName")))
+            {
+                return null;
+            }
+
+            if (replaceCustomActivities && customDetectionsById.TryGetValue(nodeId, out var detection))
+            {
+                var replacement = UiPathCustomActivityReplacementResolver.CreateStandardUiPathActivityElement(
+                    detection.SuggestedUiPathActivity,
+                    detection.DisplayName ?? ReadAttribute(activity, "DisplayName"),
+                    activity);
+                warnings.Add($"Custom activity '{detection.ActivityName}' ({nodeId}) replaced with standard UiPath activity '{detection.SuggestedUiPathActivity}'.");
+                return replacement;
+            }
+
+            var clone = new XElement(activity);
+            clone.DescendantsAndSelf()
+                .Where(element => UiPathFlowchartConversionPolicy.IsCommentedCodeBlock(element.Name.LocalName)
+                                  || UiPathFlowchartConversionPolicy.IsCommentedCodeBlock(ReadAttribute(element, "DisplayName")))
+                .ToList()
+                .ForEach(element => element.Remove());
+            clone.DescendantNodes().OfType<XComment>().Remove();
+            return clone;
         }
 
         private string? NextContinuation(UiPathFlowNode node)
@@ -731,9 +945,7 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
         private static void CopySafeAttributes(XElement source, XElement target)
         {
             foreach (var attribute in source.Attributes().Where(attribute =>
-                attribute.IsNamespaceDeclaration
-                || attribute.Name.LocalName.Equals("DisplayName", StringComparison.OrdinalIgnoreCase)
-                || attribute.Name.LocalName.Equals("WorkflowViewState.IdRef", StringComparison.OrdinalIgnoreCase)))
+                attribute.Name.LocalName.Equals("DisplayName", StringComparison.OrdinalIgnoreCase)))
             {
                 target.SetAttributeValue(attribute.Name, attribute.Value);
             }
@@ -755,7 +967,7 @@ public sealed class UiPathFlowchartConversionApplyService : IUiPathFlowchartConv
                 ?? ReadAttribute(element, "IdRef");
         }
 
-        private static string? ReadAttribute(XElement element, string localName)
+        internal static string? ReadAttribute(XElement element, string localName)
         {
             return element.Attributes().FirstOrDefault(attribute => attribute.Name.LocalName.Equals(localName, StringComparison.OrdinalIgnoreCase))?.Value;
         }

@@ -149,6 +149,35 @@ public sealed class UiPathXamlParserTests
     }
 
     [Fact]
+    public void Parse_ReadsInvokeWorkflowArgumentMappingsWithoutDictionaryActivity()
+    {
+        using var project = XamlParserTestProject.Create();
+        var xamlPath = project.WriteXaml("Main.xaml", WorkflowXaml("""
+          <Sequence>
+            <Sequence.Activities>
+              <ui:InvokeWorkflowFile WorkflowFileName="Business\Process.xaml">
+                <ui:InvokeWorkflowFile.Arguments>
+                  <scg:Dictionary x:TypeArguments="x:String, Argument">
+                    <InArgument x:Key="in_Config">[Config]</InArgument>
+                    <OutArgument x:Key="out_Result">[processResult]</OutArgument>
+                  </scg:Dictionary>
+                </ui:InvokeWorkflowFile.Arguments>
+              </ui:InvokeWorkflowFile>
+            </Sequence.Activities>
+          </Sequence>
+        """));
+
+        var analysis = new UiPathXamlParser().Parse(xamlPath, project.RootPath);
+
+        var invoke = analysis.Activities.Single(activity => activity.Name == "InvokeWorkflowFile");
+        Assert.Equal("[Config]", invoke.Arguments["in_Config"]);
+        Assert.Equal("[processResult]", invoke.Arguments["out_Result"]);
+        Assert.Equal("In", invoke.ArgumentMappingDirections["in_Config"]);
+        Assert.Equal("Out", invoke.ArgumentMappingDirections["out_Result"]);
+        Assert.DoesNotContain(analysis.Activities, activity => activity.Name == "Dictionary");
+    }
+
+    [Fact]
     public void Parse_ReadsDelayDurationProperty()
     {
         using var project = XamlParserTestProject.Create();
@@ -164,6 +193,24 @@ public sealed class UiPathXamlParserTests
 
         var activity = analysis.Activities.Single(activity => activity.Name == "Delay");
         Assert.Equal("00:00:05", activity.Properties["Duration"]);
+    }
+
+    [Fact]
+    public void Parse_PreservesCatchTypeArguments()
+    {
+        using var project = XamlParserTestProject.Create();
+        var xamlPath = project.WriteXaml("Main.xaml", WorkflowXaml("""
+          <TryCatch>
+            <TryCatch.Catches>
+              <Catch x:TypeArguments="ui:BusinessRuleException" />
+            </TryCatch.Catches>
+          </TryCatch>
+        """));
+
+        var analysis = new UiPathXamlParser().Parse(xamlPath, project.RootPath);
+
+        var activity = analysis.Activities.Single(activity => activity.Name == "Catch");
+        Assert.Equal("ui:BusinessRuleException", activity.Properties["TypeArguments"]);
     }
 
     [Fact]
@@ -187,6 +234,31 @@ public sealed class UiPathXamlParserTests
         Assert.Equal(["Sequence", "Click"], analysis.Activities.Select(activity => activity.Name));
         var click = analysis.Activities.Single(activity => activity.Name == "Click");
         Assert.Equal("<webctrl tag='BUTTON' idx='3' />", click.Properties["Selector"]);
+    }
+
+    [Fact]
+    public void Parse_ReadsNestedClickSelectorInArgumentValue()
+    {
+        using var project = XamlParserTestProject.Create();
+        var xamlPath = project.WriteXaml("Main.xaml", WorkflowXaml("""
+          <Sequence>
+            <Sequence.Activities>
+              <ui:Click DisplayName="Login Button">
+                <ui:Click.Selector>
+                  <InArgument x:TypeArguments="x:String">
+                    <![CDATA[<webctrl id='btnLogin' tag='BUTTON' />]]>
+                  </InArgument>
+                </ui:Click.Selector>
+              </ui:Click>
+            </Sequence.Activities>
+          </Sequence>
+        """));
+
+        var analysis = new UiPathXamlParser().Parse(xamlPath, project.RootPath);
+
+        var click = analysis.Activities.Single(activity => activity.Name == "Click");
+        Assert.True(click.Properties.TryGetValue("Selector", out var selector));
+        Assert.Equal("<webctrl id='btnLogin' tag='BUTTON' />", selector);
     }
 
     [Fact]
@@ -221,6 +293,84 @@ public sealed class UiPathXamlParserTests
                 Assert.Equal("io_TransactionData", argument.Name);
                 Assert.Equal("InOut", argument.Direction);
             });
+    }
+
+    [Fact]
+    public void Parse_PreservesSerializedArgumentDefaultsAndDistinguishesEmptyBindings()
+    {
+        using var project = XamlParserTestProject.Create();
+        var xamlPath = project.WriteXaml("Main.xaml", WorkflowXaml("""
+          <x:Members>
+            <x:Property Name="in_AttributeDefault" Type="InArgument(x:String)" Default="attribute-value" />
+            <x:Property Name="in_ElementDefault" Type="InArgument(x:String)">
+              <x:Property.Default>
+                <InArgument x:TypeArguments="x:String">["element-value"]</InArgument>
+              </x:Property.Default>
+            </x:Property>
+            <x:Property Name="in_BoundDefault" Type="InArgument(x:String)" />
+            <x:Property Name="in_NullDefault" Type="InArgument(x:String)" />
+            <x:Property Name="in_NoDefault" Type="InArgument(x:String)" />
+          </x:Members>
+          <this:Main.in_BoundDefault xmlns:this="clr-namespace:">
+            <InArgument x:TypeArguments="x:String">["bound-value"]</InArgument>
+          </this:Main.in_BoundDefault>
+          <this:Main.in_NullDefault xmlns:this="clr-namespace:">
+            <InArgument x:TypeArguments="x:String"><x:Null /></InArgument>
+          </this:Main.in_NullDefault>
+          <this:Main.in_NoDefault xmlns:this="clr-namespace:">
+            <InArgument x:TypeArguments="x:String" />
+          </this:Main.in_NoDefault>
+          <Sequence />
+        """));
+
+        var analysis = new UiPathXamlParser().Parse(xamlPath, project.RootPath);
+
+        Assert.Equal("attribute-value", analysis.Arguments.Single(argument => argument.Name == "in_AttributeDefault").DefaultValue);
+        Assert.Equal("[\"element-value\"]", analysis.Arguments.Single(argument => argument.Name == "in_ElementDefault").DefaultValue);
+        Assert.Equal("[\"bound-value\"]", analysis.Arguments.Single(argument => argument.Name == "in_BoundDefault").DefaultValue);
+        Assert.Equal("{x:Null}", analysis.Arguments.Single(argument => argument.Name == "in_NullDefault").DefaultValue);
+        Assert.All(analysis.Arguments.Where(argument => argument.Name != "in_NoDefault"), argument => Assert.True(argument.HasDefaultValue));
+        Assert.False(analysis.Arguments.Single(argument => argument.Name == "in_NoDefault").HasDefaultValue);
+    }
+
+    [Fact]
+    public void Parse_ReadsVariablesWithoutCountingThemAsActivities()
+    {
+        using var project = XamlParserTestProject.Create();
+        var xamlPath = project.WriteXaml("Main.xaml", WorkflowXaml("""
+          <Sequence DisplayName="Main Sequence" IdRef="Sequence_1">
+            <Sequence.Variables>
+              <Variable x:TypeArguments="x:String" Name="customerName" Default="Sample" />
+              <Variable x:TypeArguments="x:Int32" Name="Retry_Count">
+                <Variable.Default>3</Variable.Default>
+              </Variable>
+            </Sequence.Variables>
+          </Sequence>
+        """));
+
+        var analysis = new UiPathXamlParser().Parse(xamlPath, project.RootPath);
+
+        Assert.Collection(
+            analysis.Variables,
+            variable =>
+            {
+                Assert.Equal("customerName", variable.Name);
+                Assert.Equal("x:String", variable.Type);
+                Assert.Equal("Sample", variable.DefaultValue);
+                Assert.Equal("Main Sequence", variable.Scope);
+                Assert.Equal("Sequence_1", variable.ScopeActivityId);
+            },
+            variable =>
+            {
+                Assert.Equal("Retry_Count", variable.Name);
+                Assert.Equal("x:Int32", variable.Type);
+                Assert.Equal("3", variable.DefaultValue);
+                Assert.Equal("Sequence_1", variable.ScopeActivityId);
+            });
+        Assert.DoesNotContain(analysis.Activities, activity => activity.Name == "Variable");
+        var sequence = Assert.Single(analysis.Activities);
+        Assert.DoesNotContain("Name", sequence.Properties.Keys);
+        Assert.DoesNotContain("Default", sequence.Properties.Keys);
     }
 
     private static string WorkflowXaml(string body)

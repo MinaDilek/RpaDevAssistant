@@ -43,7 +43,7 @@ public sealed class UiPathAnalysisReportBuilder : IUiPathAnalysisReportBuilder
             ProfileName = profile.Name,
             QualityScore = qualityScore.Score,
             Grade = qualityScore.Grade,
-            Summary = BuildSummary(projectScan, analysis),
+            Summary = BuildSummary(projectScan, analysis, qualityScore),
             Findings = orderedFindings,
             WorkflowSummaries = BuildWorkflowSummaries(projectScan, analysis),
             ScoreBreakdown = qualityScore.ScoreBreakdown.Select(MapScoreBreakdown).ToArray(),
@@ -67,7 +67,7 @@ public sealed class UiPathAnalysisReportBuilder : IUiPathAnalysisReportBuilder
         };
     }
 
-    private static UiPathReportSummary BuildSummary(ProjectScanResult projectScan, UiPathStaticAnalysisResult analysis)
+    private static UiPathReportSummary BuildSummary(ProjectScanResult projectScan, UiPathStaticAnalysisResult analysis, UiPathQualityScore qualityScore)
     {
         var workflowsWithFindings = analysis.Findings
             .Where(finding => !string.IsNullOrWhiteSpace(finding.WorkflowPath))
@@ -77,6 +77,7 @@ public sealed class UiPathAnalysisReportBuilder : IUiPathAnalysisReportBuilder
 
         return new UiPathReportSummary
         {
+            ExecutiveSummary = BuildExecutiveSummary(analysis, qualityScore, workflowsWithFindings),
             TotalFindings = analysis.TotalFindings,
             CriticalCount = analysis.CriticalCount,
             ErrorCount = analysis.ErrorCount,
@@ -87,6 +88,50 @@ public sealed class UiPathAnalysisReportBuilder : IUiPathAnalysisReportBuilder
             CleanWorkflows = Math.Max(0, projectScan.WorkflowCount - workflowsWithFindings),
             TopCategories = BuildTopCounts(analysis.Findings.Select(finding => finding.Category.ToString())),
             TopRules = BuildTopCounts(analysis.Findings.Select(finding => $"{finding.RuleId} {finding.RuleName}"))
+        };
+    }
+
+    private static UiPathExecutiveSummary BuildExecutiveSummary(
+        UiPathStaticAnalysisResult analysis,
+        UiPathQualityScore qualityScore,
+        int workflowsWithFindings)
+    {
+        var workflowFindingCounts = analysis.Findings
+            .Where(finding => !string.IsNullOrWhiteSpace(finding.WorkflowPath))
+            .GroupBy(finding => finding.WorkflowPath!, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new { Workflow = group.Key, Count = group.Count() })
+            .OrderByDescending(item => item.Count)
+            .ThenBy(item => item.Workflow, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var mostAffected = workflowFindingCounts.FirstOrDefault();
+        var riskLevel = analysis.CriticalCount > 0 || analysis.ErrorCount > 0 || qualityScore.Score < 70
+            ? "High"
+            : analysis.WarningCount > 0 || qualityScore.Score < 90
+                ? "Medium"
+                : "Low";
+        var priorityRules = analysis.Findings
+            .GroupBy(finding => finding.RuleId, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new
+            {
+                RuleId = group.Key,
+                SeverityOrder = group.Min(finding => GetSeveritySortOrder(finding.Severity)),
+                Count = group.Count()
+            })
+            .OrderBy(item => item.SeverityOrder)
+            .ThenByDescending(item => item.Count)
+            .ThenBy(item => item.RuleId, StringComparer.OrdinalIgnoreCase)
+            .Take(3)
+            .Select(item => item.RuleId)
+            .ToArray();
+
+        return new UiPathExecutiveSummary
+        {
+            RiskLevel = riskLevel,
+            CriticalAndErrorFindings = analysis.CriticalCount + analysis.ErrorCount,
+            WorkflowsRequiringAttention = workflowsWithFindings,
+            MostAffectedWorkflow = mostAffected?.Workflow,
+            MostAffectedWorkflowFindingCount = mostAffected?.Count ?? 0,
+            PriorityRuleIds = priorityRules
         };
     }
 

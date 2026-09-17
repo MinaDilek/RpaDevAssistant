@@ -164,6 +164,32 @@ export async function askProject(input: {
   return result;
 }
 
+export async function analyzeProcessPdd(input: {
+  projectPath: string;
+  pddPath?: string;
+  pddFileName?: string;
+  pddContent?: string;
+}): Promise<unknown> {
+  const baseUrl = await getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/api/uipath/projects/process-pdd-analysis`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(withLocale(input)),
+  });
+
+  const result = await response.json();
+  if (!response.ok) {
+    const message = typeof result?.error === 'string'
+      ? result.error
+      : `Process and PDD analysis failed with HTTP ${response.status}.`;
+    throw new Error(message);
+  }
+
+  return result;
+}
+
 export async function getFixSuggestion(input: {
   projectPath: string;
   profileId?: string;
@@ -310,6 +336,55 @@ export async function undoFix(input: {
   return result;
 }
 
+export async function analyzeConfig(projectPath: string, configPath?: string | null): Promise<unknown> {
+  return postJsonRequest('/api/uipath/projects/config/analyze', { projectPath, configPath }, 'Config analysis failed');
+}
+
+async function postJsonRequest(path: string, body: unknown, fallbackMessage: string): Promise<unknown> {
+  const baseUrl = await getBackendBaseUrl();
+  const response = await postJson(baseUrl, path, body);
+  if (response.ok) {
+    return response.json();
+  }
+
+  const result = await response.json().catch(() => ({}));
+  const message = typeof result?.message === 'string'
+    ? result.message
+    : typeof result?.error === 'string'
+      ? result.error
+      : `${fallbackMessage} with HTTP ${response.status}.`;
+  throw new Error(message);
+}
+
+function postJson(baseUrl: string, path: string, body: unknown): Promise<Response> {
+  return fetch(`${baseUrl}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function previewConfigChanges(input: {
+  projectPath: string;
+  configPath?: string | null;
+  removeKeys?: string[];
+  additions?: Array<{ key: string; value: string; description?: string | null; source?: string | null }>;
+}): Promise<unknown> {
+  return postJsonRequest('/api/uipath/projects/config/preview', input, 'Config preview failed');
+}
+
+export async function generateConfigWorkbook(input: {
+  projectPath: string;
+  configPath?: string | null;
+  outputPath: string;
+  removeKeys?: string[];
+  additions?: Array<{ key: string; value: string; description?: string | null; source?: string | null }>;
+}): Promise<unknown> {
+  return postJsonRequest('/api/uipath/projects/config/generate', input, 'Config generation failed');
+}
+
 export async function analyzeFlowchartConversion(input: {
   projectPath: string;
   workflowPath: string;
@@ -342,6 +417,7 @@ export async function applyFlowchartConversion(input: {
   expectedWorkflowHash?: string | null;
   confirmed: boolean;
   createBackup?: boolean;
+  replaceCustomActivitiesWithUiPathStandard?: boolean;
 }): Promise<unknown> {
   const baseUrl = await getBackendBaseUrl();
   const response = await fetch(`${baseUrl}/api/uipath/workflows/flowchart-conversion/apply`, {
@@ -424,6 +500,7 @@ export async function convertStandaloneFlowchart(input: {
   outputPath: string;
   expectedWorkflowHash?: string | null;
   confirmed: boolean;
+  replaceCustomActivitiesWithUiPathStandard?: boolean;
 }): Promise<unknown> {
   const baseUrl = await getBackendBaseUrl();
   const response = await fetch(`${baseUrl}/api/uipath/workflows/flowchart-conversion/standalone/convert`, {

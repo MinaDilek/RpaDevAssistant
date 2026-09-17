@@ -76,6 +76,7 @@ public sealed class HtmlUiPathReportExporter : IUiPathReportExporter
         AppendMetric(html, L(localizer, locale, "Reports.Grade"), report.Grade);
         AppendMetric(html, L(localizer, locale, "Reports.Findings"), report.Summary.TotalFindings.ToString());
         html.AppendLine("</div>");
+        AppendExecutiveSummary(html, report, locale, localizer);
         html.AppendLine($"<h3>{Encode(L(localizer, locale, "Reports.FindingCounts"))}</h3>");
         html.AppendLine("<div class=\"grid\">");
         AppendMetric(html, L(localizer, locale, "Reports.Critical"), report.Summary.CriticalCount.ToString());
@@ -89,6 +90,32 @@ public sealed class HtmlUiPathReportExporter : IUiPathReportExporter
         AppendTopList(html, L(localizer, locale, "Reports.TopRules"), report.Summary.TopRules, locale, localizer);
         AppendTopList(html, L(localizer, locale, "Reports.TopCategories"), report.Summary.TopCategories, locale, localizer);
         html.AppendLine("</section>");
+    }
+
+    private static void AppendExecutiveSummary(StringBuilder html, UiPathAnalysisReport report, string locale, IRpaDevAssistantLocalizer localizer)
+    {
+        var summary = report.Summary.ExecutiveSummary;
+        var values = new Dictionary<string, string?>
+        {
+            ["risk"] = L(localizer, locale, $"Reports.RiskLevel.{summary.RiskLevel}"),
+            ["score"] = report.QualityScore.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["criticalErrors"] = summary.CriticalAndErrorFindings.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["workflows"] = summary.WorkflowsRequiringAttention.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
+        html.AppendLine("<div class=\"card\">");
+        html.AppendLine($"<h3>{Encode(L(localizer, locale, "Reports.ExecutiveSummary"))}</h3>");
+        html.AppendLine($"<p>{Encode(localizer.Get("Reports.ExecutiveNarrative", locale, values))}</p>");
+        if (!string.IsNullOrWhiteSpace(summary.MostAffectedWorkflow))
+        {
+            html.AppendLine($"<p>{Encode(localizer.Get("Reports.MostAffectedWorkflowNarrative", locale, new Dictionary<string, string?> { ["workflow"] = summary.MostAffectedWorkflow, ["count"] = summary.MostAffectedWorkflowFindingCount.ToString(System.Globalization.CultureInfo.InvariantCulture) }))}</p>");
+        }
+
+        if (summary.PriorityRuleIds.Count > 0)
+        {
+            html.AppendLine($"<p><strong>{Encode(L(localizer, locale, "Reports.PriorityRules"))}:</strong> {Encode(string.Join(", ", summary.PriorityRuleIds))}</p>");
+        }
+
+        html.AppendLine("</div>");
     }
 
     private static void AppendDependencies(StringBuilder html, UiPathAnalysisReport report, string locale, IRpaDevAssistantLocalizer localizer)

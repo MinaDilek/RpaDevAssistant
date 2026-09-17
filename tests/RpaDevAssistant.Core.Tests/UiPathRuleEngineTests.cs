@@ -221,6 +221,30 @@ public sealed class UiPathRuleEngineTests
     }
 
     [Fact]
+    public void Rpa006_UsesProfileNamingPatternAndPrefix()
+    {
+        using var project = AnalysisTestProject.Create();
+        project.WriteWorkflow("WF_ProcessInvoice.xaml", AnalysisTestProject.WorkflowXaml("<Sequence />"));
+        var context = CreateContext(project);
+        var profile = Profile(new UiPathRuleConfiguration
+        {
+            RuleId = "RPA006",
+            Enabled = true,
+            Weight = 1,
+            MaxPenalty = 5,
+            NamingConvention = new UiPathNamingConventionConfiguration
+            {
+                Pattern = "^WF_[A-Z][A-Za-z0-9]*$",
+                RequiredPrefix = "WF_"
+            }
+        });
+
+        var findings = new UiPathRuleEngine([new WorkflowNamingConventionRule()]).Analyze(context, profile).Findings;
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
     public void Rpa007_ReturnsFinding_ForGenericClickDisplayName()
     {
         using var project = AnalysisTestProject.Create();

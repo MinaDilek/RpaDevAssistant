@@ -14,6 +14,8 @@ public sealed class UiPathWorkflowAnalysis
 
     public List<UiPathArgumentInfo> Arguments { get; } = [];
 
+    public List<UiPathVariableInfo> Variables { get; } = [];
+
     public List<string> ParseErrors { get; } = [];
 
     public List<string> ParseWarnings { get; } = [];

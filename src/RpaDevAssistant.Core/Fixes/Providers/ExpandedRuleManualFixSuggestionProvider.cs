@@ -43,6 +43,11 @@ public sealed class ExpandedRuleManualFixSuggestionProvider : UiPathFixSuggestio
             return null;
         }
 
+        if (context.Finding.RuleId.Equals("RPA025", StringComparison.OrdinalIgnoreCase))
+        {
+            return BuildWorkflowRefactoringSuggestion(context, template);
+        }
+
         return new UiPathFixSuggestion
         {
             Id = SuggestionId(context),
@@ -72,6 +77,66 @@ public sealed class ExpandedRuleManualFixSuggestionProvider : UiPathFixSuggestio
             ],
             RequiresUserInput = true,
             UserInputHints = ["Confirm the intended behavior before editing the workflow."],
+            RequiresAi = false,
+            CanAutoApply = false
+        };
+    }
+
+    private static UiPathFixSuggestion BuildWorkflowRefactoringSuggestion(UiPathFixContext context, ManualFixTemplate template)
+    {
+        var complexity = context.Workflow?.Analysis?.Complexity;
+        var metrics = complexity is null
+            ? "The workflow exceeded the configured size or depth threshold."
+            : $"Activities: {complexity.ExecutableActivities}; depth: {complexity.MaxNestingDepth}; decisions: {complexity.DecisionCount}; loops: {complexity.LoopCount}; arguments: {complexity.ArgumentCount}.";
+
+        var steps = new List<string>
+        {
+            "Identify cohesive activity groups with a single business responsibility.",
+            "Define explicit In, Out, and InOut arguments before extracting each child workflow.",
+            "Extract one group at a time and replace it with Invoke Workflow File.",
+            "Run the original and refactored workflows with the same inputs, then re-run analysis."
+        };
+
+        if (complexity is { MaxNestingDepth: > 12 })
+        {
+            steps.Insert(1, "Prioritize the deepest nested branch and preserve its Try Catch and retry boundaries.");
+        }
+
+        if (complexity is { DecisionCount: > 10 })
+        {
+            steps.Insert(1, "Separate decision-heavy business rules from orchestration where their inputs and outputs are explicit.");
+        }
+
+        return new UiPathFixSuggestion
+        {
+            Id = SuggestionId(context),
+            RuleId = context.Finding.RuleId,
+            Title = template.Title,
+            Description = template.Description,
+            FixType = template.FixType,
+            Fixability = UiPathFixability.Advisory,
+            Confidence = complexity is null ? UiPathFixConfidence.Medium : UiPathFixConfidence.High,
+            RiskLevel = template.RiskLevel,
+            WorkflowPath = context.Finding.WorkflowPath,
+            CurrentValue = metrics,
+            BeforePreview = metrics,
+            AfterPreview = "Focused child workflows connected with explicit arguments and Invoke Workflow File activities.",
+            PatchPreview = TextPreview(metrics, "Decomposition plan: cohesive child workflows, explicit contracts, preserved exception/retry boundaries."),
+            Explanation = "The recommendation is derived from parsed workflow metrics; it does not invent business boundaries or modify XAML.",
+            Steps = steps,
+            Risks =
+            [
+                "Incorrect extraction boundaries can change variable scope, exception propagation, or transaction behavior.",
+                "Dynamic workflow references and shared state require manual verification."
+            ],
+            ValidationNotes =
+            [
+                "Review proposed boundaries in UiPath Studio.",
+                "Verify argument direction and type for each extracted workflow.",
+                "Run regression tests and re-run static analysis after each extraction."
+            ],
+            RequiresUserInput = true,
+            UserInputHints = ["Select business-responsibility boundaries; the analyzer intentionally does not infer them automatically."],
             RequiresAi = false,
             CanAutoApply = false
         };

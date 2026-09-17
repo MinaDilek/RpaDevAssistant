@@ -29,8 +29,10 @@ public sealed class UiPathRuleEngine : IUiPathRuleEngine
 
             try
             {
-                var findings = rule.Analyze(context);
-                if (enabledConfigurations is not null && enabledConfigurations.TryGetValue(rule.Id, out var configuration))
+                UiPathRuleConfiguration? configuration = null;
+                enabledConfigurations?.TryGetValue(rule.Id, out configuration);
+                var findings = rule.Analyze(context with { RuleConfiguration = configuration });
+                if (configuration is not null)
                 {
                     findings = findings.Select(finding => ApplyConfiguration(finding, configuration));
                 }

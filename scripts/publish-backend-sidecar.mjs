@@ -35,13 +35,23 @@ const publish = spawnSync(dotnet, [
   runtime,
   '--self-contained',
   'true',
+  '--no-restore',
   '-p:PublishSingleFile=true',
   '-p:PublishTrimmed=false',
+  '-p:UseSharedCompilation=false',
+  '-p:EnableSourceControlManagerQueries=false',
+  '-m:1',
+  '/nr:false',
   '-o',
   publishDir,
 ], {
   cwd: repoRoot,
   stdio: 'inherit',
+  env: {
+    ...process.env,
+    TMPDIR: join(repoRoot, 'tmp'),
+    GIT_CONFIG_GLOBAL: '/dev/null',
+  },
 });
 
 if (publish.status !== 0) {

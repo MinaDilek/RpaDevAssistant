@@ -163,6 +163,59 @@ public sealed class UiPathRuleExpansionTests
     }
 
     [Fact]
+    public void Rpa030_DetectsBusinessRuleExceptionCatchWithoutVisibleHandling()
+    {
+        var findings = Analyze(
+            new BusinessRuleExceptionHandlingRule(),
+            Activity("Catch", id: "catch", properties: new Dictionary<string, string?> { ["TypeArguments"] = "ui:BusinessRuleException" }),
+            Activity("Sequence", id: "body", parentId: "catch"),
+            Activity("Assign", id: "assign", parentId: "body"));
+
+        var finding = Assert.Single(findings);
+        Assert.Equal("RPA030", finding.RuleId);
+        Assert.Equal("ui:BusinessRuleException", finding.CurrentValue);
+    }
+
+    [Fact]
+    public void Rpa030_IgnoresGeneralExceptionCatch()
+    {
+        var findings = Analyze(
+            new BusinessRuleExceptionHandlingRule(),
+            Activity("Catch", id: "catch", properties: new Dictionary<string, string?> { ["TypeArguments"] = "s:Exception" }),
+            Activity("Sequence", id: "body", parentId: "catch"),
+            Activity("Assign", id: "assign", parentId: "body"));
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void Rpa030_IgnoresBusinessRuleExceptionCatchWithLogMessage()
+    {
+        var findings = Analyze(
+            new BusinessRuleExceptionHandlingRule(),
+            Activity("Catch", id: "catch", properties: new Dictionary<string, string?> { ["TypeArguments"] = "ui:BusinessRuleException" }),
+            Activity("Sequence", id: "body", parentId: "catch"),
+            Activity("LogMessage", id: "log", parentId: "body"));
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void Rpa030_IgnoresBusinessRuleExceptionCatchWithTransactionStatusWorkflow()
+    {
+        var findings = Analyze(
+            new BusinessRuleExceptionHandlingRule(),
+            Activity("Catch", id: "catch", properties: new Dictionary<string, string?> { ["TypeArguments"] = "ui:BusinessRuleException" }),
+            Activity("Sequence", id: "body", parentId: "catch"),
+            Activity("InvokeWorkflowFile", id: "invoke", parentId: "body", properties: new Dictionary<string, string?>
+            {
+                ["WorkflowFileName"] = "Framework/SetTransactionStatus.xaml"
+            }));
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
     public void Rpa017_DetectsIdxSelector()
     {
         var findings = Analyze(new SelectorUsesIdxAttributeRule(selectorAnalyzer), Activity("Click", properties: new Dictionary<string, string?>
@@ -447,6 +500,174 @@ public sealed class UiPathRuleExpansionTests
 
         Assert.Contains(profile.Rules, rule => rule.RuleId == "RPA009" && rule.Weight == 15 && rule.MaxPenalty == 30);
         Assert.Contains(profile.Rules, rule => rule.RuleId == "RPA025" && rule.Weight == 5 && rule.MaxPenalty == 15);
+        Assert.Contains(profile.Rules, rule => rule.RuleId == "RPA030" && rule.Enabled && rule.Weight == 5 && rule.MaxPenalty == 15);
+        Assert.Contains(profile.Rules, rule => rule.RuleId == "RPA046" && rule.Enabled && rule.Weight == 1 && rule.MaxPenalty == 5);
+    }
+
+    [Fact]
+    public void Rpa046_ReturnsOneWorkflowFinding_ForRepeatedLongFixedDelaysWithoutStateWait()
+    {
+        var findings = Analyze(
+            new FixedDelaysWithoutStateBasedWaitRule(expressionClassifier),
+            Activity("Delay", properties: new Dictionary<string, string?> { ["Duration"] = "00:00:05" }),
+            Activity("Delay", properties: new Dictionary<string, string?> { ["Duration"] = "00:00:10" }),
+            Activity("Click"));
+
+        var finding = Assert.Single(findings);
+        Assert.Equal("RPA046", finding.RuleId);
+        Assert.Equal("Main.xaml", finding.WorkflowPath);
+        Assert.Null(finding.ActivityId);
+        Assert.Equal("fixedDelays=2; retryScopes=0; checkAppStates=0", finding.CurrentValue);
+    }
+
+    [Fact]
+    public void Rpa046_ReturnsOneFindingPerAffectedWorkflow()
+    {
+        var first = Workflow(
+            Activity("Delay", properties: new Dictionary<string, string?> { ["Duration"] = "00:00:05" }),
+            Activity("Delay", properties: new Dictionary<string, string?> { ["Duration"] = "00:00:06" }),
+            Activity("Click"));
+        var second = new UiPathWorkflowAnalysis
+        {
+            FileName = "Login.xaml",
+            RelativePath = "Business/Login.xaml"
+        };
+        second.Activities.AddRange(
+        [
+            Activity("Delay", properties: new Dictionary<string, string?> { ["Duration"] = "00:00:07" }),
+            Activity("Delay", properties: new Dictionary<string, string?> { ["Duration"] = "00:00:08" }),
+            Activity("TypeInto")
+        ]);
+
+        var findings = new FixedDelaysWithoutStateBasedWaitRule(expressionClassifier)
+            .Analyze(Context(first, second))
+            .ToArray();
+
+        Assert.Equal(2, findings.Length);
+        Assert.Contains(findings, finding => finding.WorkflowPath == "Main.xaml");
+        Assert.Contains(findings, finding => finding.WorkflowPath == "Business/Login.xaml");
+    }
+
+    [Theory]
+    [InlineData("00:00:04", "00:00:04")]
+    [InlineData("Config(\"DelayDuration\")", "00:00:10")]
+    public void Rpa046_IgnoresShortOrConfiguredDelayPairs(string firstDuration, string secondDuration)
+    {
+        var findings = Analyze(
+            new FixedDelaysWithoutStateBasedWaitRule(expressionClassifier),
+            Activity("Delay", properties: new Dictionary<string, string?> { ["Duration"] = firstDuration }),
+            Activity("Delay", properties: new Dictionary<string, string?> { ["Duration"] = secondDuration }),
+            Activity("Click"));
+
+        Assert.Empty(findings);
+    }
+
+    [Theory]
+    [InlineData("RetryScope")]
+    [InlineData("Retry Scope")]
+    [InlineData("CheckAppState")]
+    [InlineData("Check App State")]
+    public void Rpa046_ReturnsNoFinding_WhenStateBasedWaitExists(string stateWaitName)
+    {
+        var findings = Analyze(
+            new FixedDelaysWithoutStateBasedWaitRule(expressionClassifier),
+            Activity("Delay", properties: new Dictionary<string, string?> { ["Duration"] = "00:00:05" }),
+            Activity("Delay", properties: new Dictionary<string, string?> { ["Duration"] = "00:00:06" }),
+            Activity("Click"),
+            Activity(stateWaitName));
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void Rpa046_ReturnsNoFinding_WithoutUiActivity()
+    {
+        var findings = Analyze(
+            new FixedDelaysWithoutStateBasedWaitRule(expressionClassifier),
+            Activity("Delay", properties: new Dictionary<string, string?> { ["Duration"] = "00:00:05" }),
+            Activity("Delay", properties: new Dictionary<string, string?> { ["Duration"] = "00:00:06" }),
+            Activity("Assign"));
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void DefaultProfile_DisablesAmbiguousRpa015()
+    {
+        var profile = new BuiltInUiPathRuleProfileProvider().GetProfile("default");
+
+        Assert.Contains(profile.Rules, rule => rule.RuleId == "RPA015" && !rule.Enabled);
+    }
+
+    [Fact]
+    public void Rpa035_ReturnsFinding_ForHardCodedUrl()
+    {
+        var findings = Analyze(new HardCodedUrlRule(expressionClassifier), Activity("HttpClient", properties: new Dictionary<string, string?>
+        {
+            ["Endpoint"] = "\"https://api.example.com/v1/orders\""
+        }));
+
+        var finding = Assert.Single(findings);
+        Assert.Equal("RPA035", finding.RuleId);
+        Assert.Equal("https://api.example.com/v1/orders", finding.CurrentValue);
+    }
+
+    [Fact]
+    public void Rpa035_ReturnsNoFinding_ForSchemaUrlOrConfig()
+    {
+        var schemaFindings = Analyze(new HardCodedUrlRule(expressionClassifier), Activity("Assign", properties: new Dictionary<string, string?>
+        {
+            ["Namespace"] = "http://schemas.microsoft.com/workflow"
+        }));
+        var configFindings = Analyze(new HardCodedUrlRule(expressionClassifier), Activity("HttpClient", properties: new Dictionary<string, string?>
+        {
+            ["Endpoint"] = "Config(\"OrderApiUrl\")"
+        }));
+
+        Assert.Empty(schemaFindings);
+        Assert.Empty(configFindings);
+    }
+
+    [Fact]
+    public void Rpa036_ReturnsFinding_ForCircularWorkflowReference()
+    {
+        var wfA = new UiPathWorkflowAnalysis { FileName = "A.xaml", RelativePath = "A.xaml" };
+        wfA.Activities.Add(Activity("InvokeWorkflowFile", properties: new Dictionary<string, string?> { ["WorkflowFileName"] = "B.xaml" }));
+
+        var wfB = new UiPathWorkflowAnalysis { FileName = "B.xaml", RelativePath = "B.xaml" };
+        wfB.Activities.Add(Activity("InvokeWorkflowFile", properties: new Dictionary<string, string?> { ["WorkflowFileName"] = "A.xaml" }));
+
+        var project = new ProjectScanResult { ProjectPath = "/tmp/project" };
+        project.Workflows.Add(new UiPathWorkflowInfo { Name = "A.xaml", RelativePath = "A.xaml", FullPath = "/tmp/project/A.xaml", Analysis = wfA });
+        project.Workflows.Add(new UiPathWorkflowInfo { Name = "B.xaml", RelativePath = "B.xaml", FullPath = "/tmp/project/B.xaml", Analysis = wfB });
+
+        var rule = new CircularWorkflowReferenceRule();
+        var findings = rule.Analyze(new UiPathAnalysisContext { Project = project }).ToList();
+
+        Assert.NotEmpty(findings);
+        Assert.Contains(findings, f => f.RuleId == "RPA036");
+    }
+
+    [Fact]
+    public void Rpa037_ReturnsFinding_ForUnusedWorkflow()
+    {
+        var main = new UiPathWorkflowAnalysis { FileName = "Main.xaml", RelativePath = "Main.xaml" };
+        main.Activities.Add(Activity("InvokeWorkflowFile", properties: new Dictionary<string, string?> { ["WorkflowFileName"] = "Process.xaml" }));
+
+        var process = new UiPathWorkflowAnalysis { FileName = "Process.xaml", RelativePath = "Process.xaml" };
+        var orphan = new UiPathWorkflowAnalysis { FileName = "Orphan.xaml", RelativePath = "Orphan.xaml" };
+
+        var project = new ProjectScanResult { ProjectPath = "/tmp/project" };
+        project.Workflows.Add(new UiPathWorkflowInfo { Name = "Main.xaml", RelativePath = "Main.xaml", FullPath = "/tmp/project/Main.xaml", Analysis = main });
+        project.Workflows.Add(new UiPathWorkflowInfo { Name = "Process.xaml", RelativePath = "Process.xaml", FullPath = "/tmp/project/Process.xaml", Analysis = process });
+        project.Workflows.Add(new UiPathWorkflowInfo { Name = "Orphan.xaml", RelativePath = "Orphan.xaml", FullPath = "/tmp/project/Orphan.xaml", Analysis = orphan });
+
+        var rule = new UnusedWorkflowRule();
+        var findings = rule.Analyze(new UiPathAnalysisContext { Project = project }).ToList();
+
+        var finding = Assert.Single(findings);
+        Assert.Equal("RPA037", finding.RuleId);
+        Assert.Equal("Orphan.xaml", finding.WorkflowPath);
     }
 
     private static IReadOnlyList<UiPathAnalysisFinding> Analyze(IUiPathAnalysisRule rule, params UiPathActivityInfo[] activities)
@@ -454,7 +675,7 @@ public sealed class UiPathRuleExpansionTests
         return rule.Analyze(Context(Workflow(activities))).ToArray();
     }
 
-    private static UiPathAnalysisContext Context(UiPathWorkflowAnalysis workflow)
+    private static UiPathAnalysisContext Context(params UiPathWorkflowAnalysis[] workflows)
     {
         var project = new ProjectScanResult
         {
@@ -465,13 +686,16 @@ public sealed class UiPathRuleExpansionTests
         project.ProjectFolderExists = true;
         project.ProjectJsonExists = true;
         project.ProjectJsonParsed = true;
-        project.Workflows.Add(new UiPathWorkflowInfo
+        foreach (var workflow in workflows)
         {
-            Name = workflow.FileName,
-            RelativePath = workflow.RelativePath,
-            FullPath = Path.Combine(project.ProjectPath, workflow.RelativePath),
-            Analysis = workflow
-        });
+            project.Workflows.Add(new UiPathWorkflowInfo
+            {
+                Name = workflow.FileName,
+                RelativePath = workflow.RelativePath,
+                FullPath = Path.Combine(project.ProjectPath, workflow.RelativePath),
+                Analysis = workflow
+            });
+        }
 
         return new UiPathAnalysisContext { Project = project };
     }

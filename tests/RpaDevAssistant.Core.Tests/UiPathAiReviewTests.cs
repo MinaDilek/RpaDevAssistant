@@ -78,7 +78,93 @@ public sealed class UiPathAiReviewTests
 
         Assert.Contains("Do not invent activities", prompt.SystemInstructions, StringComparison.Ordinal);
         Assert.Contains("If evidence is insufficient", prompt.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("interpretation fields", prompt.SystemInstructions, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Prompt_ContainsRedactedMinimizedContext_NotRawSecretOrFullXaml()
+    {
+        var prompt = new UiPathAiPromptBuilder().Build(BuildContext());
+
+        Assert.Contains("ApiKey=[REDACTED]", prompt.UserContext, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret", prompt.UserContext, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<Activity", prompt.UserContext, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<ui:", prompt.UserContext, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [MemberData(nameof(ReviewResponseFixtures))]
+    public void StructuredReviewResponse_IsValidatedDeterministically(
+        UiPathAiReviewResult response,
+        bool expectedValid)
+    {
+        var valid = UiPathAiReviewResponseMapper.TryMap(response, BuildContext(), out var mapped);
+
+        Assert.Equal(expectedValid, valid);
+        if (expectedValid)
+        {
+            Assert.NotEmpty(mapped.Evidence);
+            Assert.False(string.IsNullOrWhiteSpace(mapped.Interpretation));
+        }
+    }
+
+    public static TheoryData<UiPathAiReviewResult, bool> ReviewResponseFixtures => new()
+    {
+        {
+            new UiPathAiReviewResult
+            {
+                Summary = "Delay evidence suggests a reliability risk.",
+                Interpretation = "Prefer state-based waiting.",
+                RiskLevel = UiPathAiRiskLevel.Medium,
+                Confidence = 0.8,
+                Issues =
+                [
+                    new UiPathAiReviewIssue
+                    {
+                        Title = "Fixed wait",
+                        Severity = UiPathAiIssueSeverity.Medium,
+                        Description = "A deterministic Delay finding exists.",
+                        Evidence = "RPA001",
+                        Recommendation = "Review synchronization.",
+                        WorkflowPath = "Main.xaml",
+                        RelatedRuleIds = ["RPA001"]
+                    }
+                ]
+            },
+            true
+        },
+        {
+            new UiPathAiReviewResult
+            {
+                Summary = "Invented issue.",
+                RiskLevel = UiPathAiRiskLevel.High,
+                Confidence = 0.9,
+                Issues =
+                [
+                    new UiPathAiReviewIssue
+                    {
+                        Title = "Unknown",
+                        Severity = UiPathAiIssueSeverity.High,
+                        Description = "Unsupported.",
+                        Evidence = "RPA999",
+                        Recommendation = "None.",
+                        WorkflowPath = "Missing.xaml",
+                        RelatedRuleIds = ["RPA999"]
+                    }
+                ]
+            },
+            false
+        },
+        {
+            new UiPathAiReviewResult
+            {
+                Summary = "Invalid confidence.",
+                RiskLevel = UiPathAiRiskLevel.Low,
+                Confidence = 1.5
+            },
+            false
+        }
+    };
 
     [Fact]
     public void Prompt_IncludesTurkishLanguageInstruction()
@@ -137,6 +223,22 @@ public sealed class UiPathAiReviewTests
             new UiPathAiReviewContextBuilder(new SensitiveValueRedactor()),
             new UiPathAiPromptBuilder(),
             new ThrowingProvider(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<UiPathAiReviewService>.Instance);
+
+        var result = await service.ReviewAsync("/tmp/project", "default", UiPathAiReviewScope.Project, null, null, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("AI review could not be completed.", result.Summary);
+    }
+
+    [Fact]
+    public async Task ReviewService_InvalidStructuredResponseReturnsSafeFailure()
+    {
+        var service = new UiPathAiReviewService(
+            new FakeAnalyzer(),
+            new UiPathAiReviewContextBuilder(new SensitiveValueRedactor()),
+            new UiPathAiPromptBuilder(),
+            new FakeProvider(isConfigured: true, confidence: 4),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<UiPathAiReviewService>.Instance);
 
         var result = await service.ReviewAsync("/tmp/project", "default", UiPathAiReviewScope.Project, null, null, CancellationToken.None);
@@ -254,9 +356,12 @@ public sealed class UiPathAiReviewTests
 
     private sealed class FakeProvider : IUiPathAiReviewProvider
     {
-        public FakeProvider(bool isConfigured)
+        private readonly double confidence;
+
+        public FakeProvider(bool isConfigured, double confidence = 0.8)
         {
             IsConfigured = isConfigured;
+            this.confidence = confidence;
         }
 
         public string ProviderName => "Fake";
@@ -270,7 +375,7 @@ public sealed class UiPathAiReviewTests
                 Summary = "Looks reasonable.",
                 RiskLevel = UiPathAiRiskLevel.Low,
                 ReviewedScope = prompt.Scope,
-                Confidence = 0.8
+                Confidence = confidence
             });
         }
     }

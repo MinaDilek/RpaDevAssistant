@@ -38,7 +38,7 @@ public sealed class PackageVersionAlignmentRiskRule : UiPathAnalysisRuleBase
 
     public override string Name => "Package Version Alignment Risk";
 
-    public override string Description => "Detects significant major version differences among declared UiPath packages using offline heuristics.";
+    public override string Description => "Detects package version alignment, outdated version, and known vulnerability risks.";
 
     public override RuleSeverity Severity => RuleSeverity.Warning;
 
@@ -48,14 +48,32 @@ public sealed class PackageVersionAlignmentRiskRule : UiPathAnalysisRuleBase
     {
         foreach (var package in context.Project.DependencyAnalysis?.Packages ?? [])
         {
-            if (package.CompatibilityStatus != UiPathDependencyCompatibilityStatus.PotentialConflict)
+            if (package.CompatibilityStatus != UiPathDependencyCompatibilityStatus.PotentialConflict
+                && package.VersionStatus != UiPathDependencyVersionStatus.Outdated
+                && package.VulnerabilityStatus != UiPathPackageVulnerabilityStatus.Known)
             {
                 continue;
             }
 
+            var reasons = new List<string>();
+            if (package.CompatibilityStatus == UiPathDependencyCompatibilityStatus.PotentialConflict)
+            {
+                reasons.Add("declared UiPath package major versions are significantly different");
+            }
+
+            if (package.VersionStatus == UiPathDependencyVersionStatus.Outdated)
+            {
+                reasons.Add($"latest stable NuGet version is {package.LatestVersion}");
+            }
+
+            if (package.VulnerabilityStatus == UiPathPackageVulnerabilityStatus.Known)
+            {
+                reasons.Add($"{package.Vulnerabilities.Count} known vulnerability advisory item(s) affect the declared version");
+            }
+
             yield return CreateFinding(
-                $"{package.Name} may have a package version alignment risk.",
-                "Review UiPath package major versions together. This is an offline heuristic, not a latest-version check.",
+                $"{package.Name} has package version risk: {string.Join("; ", reasons)}.",
+                "Review compatibility and update to a supported non-vulnerable version after testing the workflow in UiPath Studio.",
                 propertyName: "dependencies",
                 currentValue: $"{package.Name} {package.DeclaredVersion}");
         }
@@ -95,7 +113,7 @@ public sealed class LegacyPackageIndicatorRule : UiPathAnalysisRuleBase
 
     public override string Name => "Legacy Package Indicator";
 
-    public override string Description => "Flags package names that contain offline legacy/classic indicators.";
+    public override string Description => "Flags package names with legacy/classic indicators and versions deprecated by the package publisher.";
 
     public override RuleSeverity Severity => RuleSeverity.Suggestion;
 
@@ -105,16 +123,24 @@ public sealed class LegacyPackageIndicatorRule : UiPathAnalysisRuleBase
     {
         foreach (var package in context.Project.DependencyAnalysis?.Packages ?? [])
         {
-            if (package.VersionStatus != UiPathDependencyVersionStatus.Legacy)
+            if (package.VersionStatus != UiPathDependencyVersionStatus.Legacy
+                && package.DeprecationStatus != UiPathPackageDeprecationStatus.Deprecated)
             {
                 continue;
             }
 
+            var message = package.DeprecationStatus == UiPathPackageDeprecationStatus.Deprecated
+                ? $"{package.Name} {package.DeclaredVersion} is deprecated on NuGet."
+                : $"{package.Name} has a legacy/classic package indicator.";
+            var recommendation = package.AlternatePackage is null
+                ? "Confirm whether this package version is still required and migrate to a supported version where practical."
+                : $"Review the publisher's alternate package suggestion ({package.AlternatePackage}) and validate migration in UiPath Studio.";
+
             yield return CreateFinding(
-                $"{package.Name} has a legacy/classic package indicator.",
-                "Confirm whether this package is still required before migration or modernization work.",
+                message,
+                recommendation,
                 propertyName: "dependencies",
-                currentValue: package.Name);
+                currentValue: $"{package.Name} {package.DeclaredVersion}");
         }
     }
 }

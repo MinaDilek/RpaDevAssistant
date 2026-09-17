@@ -62,7 +62,8 @@ public sealed class UiPathFlowchartConversionController : ControllerBase
             XamlFilePath = request.XamlFilePath,
             OutputPath = request.OutputPath,
             ExpectedWorkflowHash = request.ExpectedWorkflowHash,
-            Confirmed = request.Confirmed
+            Confirmed = request.Confirmed,
+            ReplaceCustomActivitiesWithUiPathStandard = request.ReplaceCustomActivitiesWithUiPathStandard
         }, cancellationToken);
         return result.Success ? Ok(result) : BadRequest(result);
     }
@@ -119,7 +120,8 @@ public sealed class UiPathFlowchartConversionController : ControllerBase
             WorkflowPath = request.WorkflowPath,
             ExpectedWorkflowHash = request.ExpectedWorkflowHash,
             Confirmed = request.Confirmed,
-            CreateBackup = request.CreateBackup
+            CreateBackup = request.CreateBackup,
+            ReplaceCustomActivitiesWithUiPathStandard = request.ReplaceCustomActivitiesWithUiPathStandard
         }, cancellationToken);
         return result.Success ? Ok(result) : BadRequest(result);
     }

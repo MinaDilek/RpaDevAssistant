@@ -495,6 +495,7 @@ public sealed class RealUiPathProjectEndToEndValidationTests
             new UnrealisticallyLowUiTimeoutRule(expressionClassifier),
             new ContinueOnErrorEnabledRule(),
             new ExcessiveContinueOnErrorUsageRule(metricsCalculator),
+            new BusinessRuleExceptionHandlingRule(),
             new MissingExplicitTimeoutOnCriticalUiActivityRule(),
             new LegacyUiAutomationActivityRule(),
             new SelectorUsesIdxAttributeRule(selectorAnalyzer),

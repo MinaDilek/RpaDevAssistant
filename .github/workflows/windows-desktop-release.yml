@@ -1,0 +1,79 @@
+name: Windows Desktop Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "codex/windows-installer-validation-*"
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build-nsis:
+    runs-on: windows-2022
+    env:
+      WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate backend
+        run: |
+          dotnet restore RpaDevAssistant.sln
+          dotnet build RpaDevAssistant.sln --configuration Release --no-restore
+          dotnet test RpaDevAssistant.sln --configuration Release --no-build
+
+      - name: Validate frontend
+        run: |
+          npm run frontend:test
+          npm run frontend:build
+
+      - name: Publish backend sidecar
+        run: npm run backend:publish:win
+
+      - name: Build NSIS installer
+        run: npm run tauri:build --workspace frontend
+
+      - name: Sign installer when certificate is configured
+        if: env.WINDOWS_CERTIFICATE_BASE64 != ''
+        shell: pwsh
+        run: |
+          $certificatePath = Join-Path $env:RUNNER_TEMP "rpadevassistant-signing.pfx"
+          [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
+          $installer = Get-ChildItem "frontend/src-tauri/target/release/bundle/nsis/*.exe" | Select-Object -First 1
+          if (-not $installer) { throw "NSIS installer was not produced." }
+          & signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f $certificatePath /p $env:WINDOWS_CERTIFICATE_PASSWORD $installer.FullName
+          Remove-Item $certificatePath -Force
+
+      - name: Verify release artifact
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "frontend/src-tauri/target/release/bundle/nsis/*.exe" | Select-Object -First 1
+          if (-not $installer -or $installer.Length -le 0) { throw "A non-empty NSIS installer was not produced." }
+          Write-Host "Installer: $($installer.FullName) ($($installer.Length) bytes)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rpa-dev-assistant-windows-nsis
+          path: frontend/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 30

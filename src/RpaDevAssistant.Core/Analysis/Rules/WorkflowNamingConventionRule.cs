@@ -25,20 +25,47 @@ public sealed class WorkflowNamingConventionRule : UiPathAnalysisRuleBase
 
     public override IEnumerable<UiPathAnalysisFinding> Analyze(UiPathAnalysisContext context)
     {
+        var convention = context.RuleConfiguration?.NamingConvention;
+        var pattern = CreatePattern(convention?.Pattern);
+        var requiredPrefix = convention?.RequiredPrefix;
         foreach (var workflow in context.Workflows)
         {
             var nameWithoutExtension = Path.GetFileNameWithoutExtension(workflow.Name);
-            if (PascalCaseWorkflowName.IsMatch(nameWithoutExtension) && !GenericNames.Contains(nameWithoutExtension))
+            var matchesPrefix = string.IsNullOrWhiteSpace(requiredPrefix)
+                || nameWithoutExtension.StartsWith(requiredPrefix, StringComparison.Ordinal);
+            if (pattern.IsMatch(nameWithoutExtension) && matchesPrefix && !GenericNames.Contains(nameWithoutExtension))
             {
                 continue;
             }
 
+            var expected = string.IsNullOrWhiteSpace(requiredPrefix)
+                ? "the configured workflow naming pattern"
+                : $"the configured pattern and prefix '{requiredPrefix}'";
             yield return CreateFinding(
-                "Workflow file name looks generic or does not follow PascalCase.",
-                "Use a meaningful PascalCase name such as ProcessInvoice.xaml or GetTransactionData.xaml.",
+                $"Workflow file name looks generic or does not follow {expected}.",
+                string.IsNullOrWhiteSpace(requiredPrefix)
+                    ? "Use a meaningful PascalCase name such as ProcessInvoice.xaml or GetTransactionData.xaml."
+                    : $"Use a meaningful workflow name beginning with '{requiredPrefix}'.",
                 workflow.Analysis,
                 propertyName: "FileName",
                 currentValue: workflow.Name);
+        }
+    }
+
+    private static Regex CreatePattern(string? configuredPattern)
+    {
+        if (string.IsNullOrWhiteSpace(configuredPattern))
+        {
+            return PascalCaseWorkflowName;
+        }
+
+        try
+        {
+            return new Regex(configuredPattern, RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+        }
+        catch (ArgumentException)
+        {
+            return PascalCaseWorkflowName;
         }
     }
 }

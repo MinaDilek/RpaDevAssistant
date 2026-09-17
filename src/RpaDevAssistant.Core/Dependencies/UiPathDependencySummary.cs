@@ -16,6 +16,14 @@ public sealed record UiPathDependencySummary
 
     public int LegacyIndicators { get; init; }
 
+    public int OutdatedDependencies { get; init; }
+
+    public int DeprecatedDependencies { get; init; }
+
+    public int VulnerableDependencies { get; init; }
+
+    public int UnknownMetadataDependencies { get; init; }
+
     public UiPathModernClassicMode ModernClassicMode { get; init; } = UiPathModernClassicMode.Unknown;
 
     public IReadOnlyList<UiPathDependencyAnalysis> Packages { get; init; } = [];

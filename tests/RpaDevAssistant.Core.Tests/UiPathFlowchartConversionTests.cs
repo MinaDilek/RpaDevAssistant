@@ -358,6 +358,197 @@ public sealed class UiPathFlowchartConversionTests
     }
 
     [Fact]
+    public async Task StandaloneConverter_ExcludesCommentedOutActivityBlocksFromPreviewAndOutput()
+    {
+        using var fixture = new FlowchartProjectFixture();
+        fixture.WriteWorkflow("Commented.xaml", FlowchartWithCommentedOutBlock());
+        var sourcePath = Path.Combine(fixture.RootPath, "Commented.xaml");
+        var outputPath = Path.Combine(fixture.RootPath, "Commented_Sequence.xaml");
+        var analysis = await StandaloneConverter().AnalyzeAsync(sourcePath);
+
+        Assert.DoesNotContain(analysis.Plan!.PreviewTree!.Children, node =>
+            node.Type.Contains("CommentOut", StringComparison.OrdinalIgnoreCase)
+            || node.DisplayName?.Contains("Disabled", StringComparison.OrdinalIgnoreCase) == true);
+
+        var result = await StandaloneConverter().ConvertAsync(new UiPathStandaloneFlowchartConvertRequest
+        {
+            XamlFilePath = sourcePath,
+            OutputPath = outputPath,
+            ExpectedWorkflowHash = analysis.WorkflowHash,
+            Confirmed = true
+        });
+
+        Assert.True(result.Success);
+        var converted = File.ReadAllText(outputPath);
+        Assert.DoesNotContain("CommentOut", converted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Disabled Assignment", converted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Active Assignment", converted, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StandaloneConverter_CompletelyExcludesUiCommentsCommentOutAndXmlComments()
+    {
+        using var fixture = new FlowchartProjectFixture();
+        var xaml = $$"""
+            <Flowchart xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities"
+                       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                       xmlns:ui="http://schemas.uipath.com/workflow/activities"
+                       StartNode="{x:Reference A}">
+              <FlowStep x:Name="A">
+                <Sequence DisplayName="Main step">
+                  <!-- An XML comment inside sequence -->
+                  <Assign DisplayName="Step 1" />
+                  <ui:Comment Text="A developer comment note" />
+                  <Comment DisplayName="Another note" />
+                </Sequence>
+                <FlowStep.Next><x:Reference Name="B" /></FlowStep.Next>
+              </FlowStep>
+              <FlowStep x:Name="B">
+                <ui:CommentOut DisplayName="Disabled FlowStep">
+                  <ui:CommentOut.Body>
+                    <ActivityAction x:TypeArguments="Activity">
+                      <Assign DisplayName="Disabled Assign" />
+                    </ActivityAction>
+                  </ui:CommentOut.Body>
+                </ui:CommentOut>
+                <FlowStep.Next><x:Reference Name="C" /></FlowStep.Next>
+              </FlowStep>
+              <FlowStep x:Name="C">
+                <Assign DisplayName="// Commented out step by prefix" />
+                <FlowStep.Next><x:Reference Name="D" /></FlowStep.Next>
+              </FlowStep>
+              <FlowStep x:Name="D">
+                <LogMessage DisplayName="Final Step" />
+              </FlowStep>
+            </Flowchart>
+            """;
+
+        fixture.WriteWorkflow("CommentsExclusion.xaml", xaml);
+        var sourcePath = Path.Combine(fixture.RootPath, "CommentsExclusion.xaml");
+        var outputPath = Path.Combine(fixture.RootPath, "CommentsExclusion_Sequence.xaml");
+        var analysis = await StandaloneConverter().AnalyzeAsync(sourcePath);
+
+        Assert.True(analysis.CanConvert);
+        Assert.DoesNotContain(analysis.Plan!.PreviewTree!.Children, node =>
+            node.Type.Contains("Comment", StringComparison.OrdinalIgnoreCase)
+            || node.DisplayName?.Contains("Disabled", StringComparison.OrdinalIgnoreCase) == true
+            || node.DisplayName?.StartsWith("//", StringComparison.Ordinal) == true);
+
+        var result = await StandaloneConverter().ConvertAsync(new UiPathStandaloneFlowchartConvertRequest
+        {
+            XamlFilePath = sourcePath,
+            OutputPath = outputPath,
+            ExpectedWorkflowHash = analysis.WorkflowHash,
+            Confirmed = true
+        });
+
+        Assert.True(result.Success);
+        var converted = File.ReadAllText(outputPath);
+        Assert.DoesNotContain("CommentOut", converted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ui:Comment", converted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<Comment", converted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Disabled FlowStep", converted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Disabled Assign", converted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("An XML comment inside sequence", converted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Commented out step by prefix", converted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Step 1", converted, StringComparison.Ordinal);
+        Assert.Contains("Final Step", converted, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StandaloneConverter_ResolvesStartNodeElement_CopiesVariables_AndExcludesCommentOut()
+    {
+        using var fixture = new FlowchartProjectFixture();
+        var xaml = $$"""
+            <Activity mc:Ignorable="sap sap2010" x:Class="Service_Test"
+                      xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities"
+                      xmlns:av="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                      xmlns:sap="http://schemas.microsoft.com/netfx/2009/xaml/activities/presentation"
+                      xmlns:sap2010="http://schemas.microsoft.com/netfx/2010/xaml/activities/presentation"
+                      xmlns:ui="http://schemas.uipath.com/workflow/activities"
+                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+              <Sequence DisplayName="RootSequence">
+                <Flowchart DisplayName="Services_Flowchart">
+                  <Flowchart.Variables>
+                    <Variable x:TypeArguments="x:Int32" Name="retry_count" />
+                    <Variable x:TypeArguments="x:String" Name="result_sorgu" />
+                  </Flowchart.Variables>
+                  <Flowchart.StartNode>
+                    <x:Reference>__ReferenceIDStart</x:Reference>
+                  </Flowchart.StartNode>
+                  <FlowStep x:Name="__ReferenceIDLoopStep">
+                    <ui:CommentOut sap2010:WorkflowViewState.IdRef="CommentOut_1">
+                      <ui:CommentOut.Body>
+                        <Sequence DisplayName="Ignored Activities">
+                          <Assign DisplayName="in_Services_Get_Timeout" />
+                        </Sequence>
+                      </ui:CommentOut.Body>
+                    </ui:CommentOut>
+                    <FlowStep.Next>
+                      <FlowStep x:Name="__ReferenceIDHttp">
+                        <ui:HttpClient DisplayName="HTTP Request Get" Method="GET" />
+                        <FlowStep.Next>
+                          <FlowStep x:Name="__ReferenceIDJson">
+                            <ui:DeserializeJson DisplayName="Deserialize JSON" JsonString="[result_sorgu]" />
+                          </FlowStep>
+                        </FlowStep.Next>
+                      </FlowStep>
+                    </FlowStep.Next>
+                  </FlowStep>
+                  <FlowStep x:Name="__ReferenceIDStart">
+                    <Assign DisplayName="retry_count=1">
+                      <Assign.To>
+                        <OutArgument x:TypeArguments="x:Int32">[retry_count]</OutArgument>
+                      </Assign.To>
+                      <Assign.Value>
+                        <InArgument x:TypeArguments="x:Int32">1</InArgument>
+                      </Assign.Value>
+                    </Assign>
+                    <FlowStep.Next>
+                      <x:Reference>__ReferenceIDLoopStep</x:Reference>
+                    </FlowStep.Next>
+                  </FlowStep>
+                </Flowchart>
+              </Sequence>
+            </Activity>
+            """;
+
+        fixture.WriteWorkflow("Services_Test.xaml", xaml);
+        var sourcePath = Path.Combine(fixture.RootPath, "Services_Test.xaml");
+        var outputPath = Path.Combine(fixture.RootPath, "Services_Test_Sequence.xaml");
+        var analysis = await StandaloneConverter().AnalyzeAsync(sourcePath);
+
+        Assert.True(analysis.CanConvert);
+        Assert.Equal("__ReferenceIDStart", analysis.Graph?.StartNodeId);
+
+        var result = await StandaloneConverter().ConvertAsync(new UiPathStandaloneFlowchartConvertRequest
+        {
+            XamlFilePath = sourcePath,
+            OutputPath = outputPath,
+            ExpectedWorkflowHash = analysis.WorkflowHash,
+            Confirmed = true
+        });
+
+        Assert.True(result.Success);
+        var converted = File.ReadAllText(outputPath);
+
+        Assert.DoesNotContain("Review Required - Unmapped Flowchart Nodes", converted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("retry_count=1", converted, StringComparison.Ordinal);
+
+        Assert.Contains("<Sequence.Variables>", converted, StringComparison.Ordinal);
+        Assert.Contains("Name=\"retry_count\"", converted, StringComparison.Ordinal);
+        Assert.Contains("Name=\"result_sorgu\"", converted, StringComparison.Ordinal);
+
+        Assert.DoesNotContain("CommentOut", converted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("in_Services_Get_Timeout", converted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Ignored Activities", converted, StringComparison.OrdinalIgnoreCase);
+
+        var projectJson = File.ReadAllText(Path.Combine(fixture.RootPath, "project.json"));
+        Assert.Contains("UiPath.WebAPI.Activities", projectJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task StandaloneConverter_DoesNotOverwriteOriginalFile()
     {
         using var fixture = new FlowchartProjectFixture();
@@ -604,6 +795,110 @@ public sealed class UiPathFlowchartConversionTests
         Assert.Equal("backup_not_allowed", rollback.ErrorCode);
     }
 
+    [Fact]
+    public async Task Standalone_DetectsCustomDependencyActivitiesAndSuggestsStandardUiPathReplacements()
+    {
+        using var fixture = new FlowchartProjectFixture();
+        fixture.WriteWorkflow("CustomFlow.xaml", FlowchartWithCustomActivities());
+
+        var result = await StandaloneConverter().AnalyzeAsync(Path.Combine(fixture.RootPath, "CustomFlow.xaml"));
+
+        Assert.True(result.CanConvert);
+        Assert.NotNull(result.Plan);
+        Assert.NotEmpty(result.CustomActivityDetections);
+        Assert.Contains(result.CustomActivityDetections, d =>
+            d.ActivityName == "CustomLogUtility"
+            && d.SuggestedUiPathActivity == "ui:LogMessage"
+            && d.SuggestedPackage == "UiPath.System.Activities");
+        Assert.Contains(result.CustomActivityDetections, d =>
+            d.ActivityName == "CustomHttpClient"
+            && d.SuggestedUiPathActivity == "ui:HttpClient"
+            && d.SuggestedPackage == "UiPath.WebAPI.Activities");
+    }
+
+    [Fact]
+    public async Task Standalone_ReplacesCustomActivitiesWithUiPathStandardWhenConfirmed()
+    {
+        using var fixture = new FlowchartProjectFixture();
+        var sourcePath = Path.Combine(fixture.RootPath, "CustomFlow.xaml");
+        var outputPath = Path.Combine(fixture.RootPath, "Converted_Sequence.xaml");
+        fixture.WriteWorkflow("CustomFlow.xaml", FlowchartWithCustomActivities());
+
+        var convert = await StandaloneConverter().ConvertAsync(new UiPathStandaloneFlowchartConvertRequest
+        {
+            XamlFilePath = sourcePath,
+            OutputPath = outputPath,
+            Confirmed = true,
+            ReplaceCustomActivitiesWithUiPathStandard = true
+        });
+
+        Assert.True(convert.Success);
+        Assert.True(convert.Saved);
+        Assert.True(File.Exists(outputPath));
+
+        var outputXaml = File.ReadAllText(outputPath);
+        Assert.Contains("ui:LogMessage", outputXaml);
+        Assert.Contains("ui:HttpClient", outputXaml);
+        Assert.DoesNotContain("CustomLogUtility", outputXaml);
+        Assert.DoesNotContain("CustomHttpClient", outputXaml);
+        Assert.Contains("xmlns:ui=\"http://schemas.uipath.com/workflow/activities\"", outputXaml);
+    }
+
+    [Fact]
+    public async Task Standalone_ServicesSorgu_ParsesHttpClientCorrectly()
+    {
+        var path = "/Users/mina/Desktop/W_Personel_Kredisi_IK_Onay/Services_Sorgu.xaml";
+        Assert.True(File.Exists(path));
+
+        var result = await StandaloneConverter().AnalyzeAsync(path);
+        Assert.True(result.CanConvert);
+        if (result.CustomActivityDetections.Count > 0)
+        {
+            Assert.Contains(result.CustomActivityDetections, d =>
+                d.ActivityName.Contains("HttpClient")
+                && d.SuggestedPackage == "UiPath.WebAPI.Activities");
+        }
+        var projectOut = "/Users/mina/Desktop/W_Personel_Kredisi_IK_Onay/Services_Sorgu_Sequence.xaml";
+        var desktopOut = "/Users/mina/Desktop/Services_Sorgu_Sequence.xaml";
+
+        var convertResult = await StandaloneConverter().ConvertAsync(new UiPathStandaloneFlowchartConvertRequest
+        {
+            XamlFilePath = path,
+            OutputPath = projectOut,
+            Confirmed = true,
+            ReplaceCustomActivitiesWithUiPathStandard = true
+        });
+
+        Assert.True(convertResult.Success);
+        File.Copy(projectOut, desktopOut, overwrite: true);
+
+        var convertedXaml = File.ReadAllText(projectOut);
+        Assert.Contains("ui:HttpClient", convertedXaml);
+        Assert.Contains("HTTP Request Get", convertedXaml);
+        Assert.Contains("EndPoint=", convertedXaml);
+        Assert.Contains("<ui:HttpClient.Attachments>", convertedXaml);
+        Assert.Contains("xmlns:ui=\"http://schemas.uipath.com/workflow/activities\"", convertedXaml);
+        Assert.Contains("ui:DeserializeJson", convertedXaml);
+        Assert.Contains("<Sequence.Variables>", convertedXaml);
+        Assert.Contains("retry_count", convertedXaml);
+        Assert.DoesNotContain("ui:CommentOut", convertedXaml);
+        Assert.DoesNotContain("CommentOut_1", convertedXaml);
+    }
+
+
+
+
+
+    private static string FlowchartWithCustomActivities() => Flowchart("""
+        <FlowStep x:Name="A">
+          <CustomLogUtility DisplayName="Write Audit Log" />
+          <FlowStep.Next><x:Reference Name="B" /></FlowStep.Next>
+        </FlowStep>
+        <FlowStep x:Name="B">
+          <CustomHttpClient DisplayName="Fetch Data" Endpoint="https://api.example.com/items" />
+        </FlowStep>
+        """, "A");
+
     private static bool ContainsPreviewType(UiPathSequencePreviewNode node, string type)
     {
         return node.Type.Equals(type, StringComparison.OrdinalIgnoreCase)
@@ -702,6 +997,23 @@ public sealed class UiPathFlowchartConversionTests
         <FlowStep x:Name="B"><Delay DisplayName="Wait" /><FlowStep.Next><x:Reference Name="C" /></FlowStep.Next></FlowStep>
         <FlowStep x:Name="C"><LogMessage DisplayName="Done" />
         </FlowStep>
+        """, "A");
+
+    private static string FlowchartWithCommentedOutBlock() => Flowchart("""
+        <FlowStep x:Name="A">
+          <Sequence DisplayName="Mixed activity block">
+            <Assign DisplayName="Active Assignment" />
+            <CommentOut DisplayName="Disabled block">
+              <CommentOut.Body>
+                <Sequence DisplayName="Disabled activities">
+                  <Assign DisplayName="Disabled Assignment" />
+                </Sequence>
+              </CommentOut.Body>
+            </CommentOut>
+          </Sequence>
+          <FlowStep.Next><x:Reference Name="B" /></FlowStep.Next>
+        </FlowStep>
+        <FlowStep x:Name="B"><LogMessage DisplayName="Done" /></FlowStep>
         """, "A");
 
     private static string DecisionFlowchart() => Flowchart("""

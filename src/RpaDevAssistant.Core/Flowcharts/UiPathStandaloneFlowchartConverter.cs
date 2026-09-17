@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Xml;
 using System.Xml.Linq;
 using RpaDevAssistant.Core.Fixes.Apply;
@@ -32,7 +34,7 @@ public sealed class UiPathStandaloneFlowchartConverter : IUiPathStandaloneFlowch
         }
 
         var fullPath = Path.GetFullPath(xamlFilePath);
-        var projectRoot = Path.GetDirectoryName(fullPath) ?? Directory.GetCurrentDirectory();
+        var projectRoot = ResolveProjectRoot(fullPath);
         var analysis = parser.Parse(fullPath, projectRoot);
         if (analysis.ParseErrors.Count > 0)
         {
@@ -45,8 +47,9 @@ public sealed class UiPathStandaloneFlowchartConverter : IUiPathStandaloneFlowch
             ? UiPathFlowchartConversionAssessor.Assess(graph)
             : null;
         var plan = assessment is not null && graph is not null
-            ? UiPathFlowchartConversionPlanner.BuildPlan(graph, assessment)
+            ? UiPathFlowchartConversionPlanner.BuildPlan(graph, assessment, projectRoot)
             : null;
+
         var messages = MessagesFor(analysis.StructureType, analysis.ContainsFlowchart, analysis.FlowchartCount, assessment);
         var status = StatusFor(analysis.StructureType, analysis.ContainsFlowchart, analysis.FlowchartCount, assessment);
         var canConvert = analysis.ContainsFlowchart
@@ -70,6 +73,7 @@ public sealed class UiPathStandaloneFlowchartConverter : IUiPathStandaloneFlowch
             Graph = graph,
             Assessment = assessment,
             Plan = plan,
+            CustomActivityDetections = plan?.CustomActivityDetections ?? [],
             WorkflowHash = UiPathFileHash.Sha256(fullPath),
             SuggestedOutputFileName = SuggestedOutputFileName(fullPath),
             Messages = messages,
@@ -111,7 +115,13 @@ public sealed class UiPathStandaloneFlowchartConverter : IUiPathStandaloneFlowch
         var expectedStructure = analysis.StructureType == UiPathWorkflowStructureType.Flowchart
             ? UiPathWorkflowStructureType.Sequence
             : analysis.StructureType;
-        var generation = generator.GenerateConvertedContent(analysis.FilePath, Path.GetDirectoryName(analysis.FilePath)!, analysis.FileName, analysis.Graph, expectedStructure);
+        var generation = generator.GenerateConvertedContent(
+            analysis.FilePath,
+            Path.GetDirectoryName(analysis.FilePath)!,
+            analysis.FileName,
+            analysis.Graph,
+            expectedStructure,
+            replaceCustomActivities: request.ReplaceCustomActivitiesWithUiPathStandard);
         if (!generation.Validation.IsValid || generation.Content is null)
         {
             return ConvertFailed(request.XamlFilePath, request.OutputPath, "Converted XAML could not be generated safely.", "generation_failed", generation.Validation.Errors);
@@ -131,6 +141,53 @@ public sealed class UiPathStandaloneFlowchartConverter : IUiPathStandaloneFlowch
             }
 
             File.Move(tempPath, outputPath, overwrite: true);
+
+            var projectRoot = ResolveProjectRoot(analysis.FilePath);
+            var outputProjectRoot = ResolveProjectRoot(outputPath);
+            var warningsList = generation.Warnings.ToList();
+
+            if (request.ReplaceCustomActivitiesWithUiPathStandard && analysis.CustomActivityDetections.Count > 0)
+            {
+                foreach (var detection in analysis.CustomActivityDetections.Where(d => !string.IsNullOrWhiteSpace(d.SuggestedPackage)))
+                {
+                    if (detection.SuggestedPackage.Equals("UiPath.WebAPI.Activities", StringComparison.OrdinalIgnoreCase))
+                    {
+                        UiPathCustomActivityReplacementResolver.EnsureDirectDependencyInProjectJson(projectRoot, "UiPath.WebAPI.Activities", "[1.21.1]");
+                        if (!string.Equals(projectRoot, outputProjectRoot, StringComparison.OrdinalIgnoreCase))
+                        {
+                            UiPathCustomActivityReplacementResolver.EnsureDirectDependencyInProjectJson(outputProjectRoot, "UiPath.WebAPI.Activities", "[1.21.1]");
+                        }
+                    }
+                    else if (detection.SuggestedPackage.Equals("UiPath.Database.Activities", StringComparison.OrdinalIgnoreCase))
+                    {
+                        UiPathCustomActivityReplacementResolver.EnsureDirectDependencyInProjectJson(projectRoot, "UiPath.Database.Activities", "[1.7.1]");
+                        if (!string.Equals(projectRoot, outputProjectRoot, StringComparison.OrdinalIgnoreCase))
+                        {
+                            UiPathCustomActivityReplacementResolver.EnsureDirectDependencyInProjectJson(outputProjectRoot, "UiPath.Database.Activities", "[1.7.1]");
+                        }
+                    }
+                }
+            }
+
+            var usesWebApi = convertedAnalysis.Activities.Any(a =>
+                a.Name.Equals("HttpClient", StringComparison.OrdinalIgnoreCase)
+                || a.Name.Equals("DeserializeJson", StringComparison.OrdinalIgnoreCase)
+                || a.Name.Equals("DeserializeXml", StringComparison.OrdinalIgnoreCase));
+
+            if (usesWebApi)
+            {
+                UiPathCustomActivityReplacementResolver.EnsureDirectDependencyInProjectJson(projectRoot, "UiPath.WebAPI.Activities", "[1.21.1]");
+                if (!string.Equals(projectRoot, outputProjectRoot, StringComparison.OrdinalIgnoreCase))
+                {
+                    UiPathCustomActivityReplacementResolver.EnsureDirectDependencyInProjectJson(outputProjectRoot, "UiPath.WebAPI.Activities", "[1.21.1]");
+                }
+            }
+
+            if (!File.Exists(Path.Combine(outputProjectRoot, "project.json")))
+            {
+                warningsList.Add("The converted workflow was saved outside a UiPath project folder. Place it in your UiPath project directory so that UiPath Studio can resolve its package dependencies (e.g., UiPath.WebAPI.Activities).");
+            }
+
             return new UiPathStandaloneFlowchartConvertResult
             {
                 Success = true,
@@ -145,11 +202,12 @@ public sealed class UiPathStandaloneFlowchartConverter : IUiPathStandaloneFlowch
                 OriginalActivityCount = analysis.ActivityCount,
                 ConvertedActivityCount = convertedAnalysis.Activities.Count,
                 Transformations = analysis.Assessment?.RequiredTransformations ?? [],
-                Warnings = generation.Warnings,
+                Warnings = warningsList,
                 SavedAtUtc = DateTimeOffset.UtcNow
             };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or XmlException)
+
         {
             TryDelete(tempPath);
             return ConvertFailed(request.XamlFilePath, request.OutputPath, $"Converted workflow could not be saved: {ex.Message}", "save_failed");
@@ -337,5 +395,27 @@ public sealed class UiPathStandaloneFlowchartConverter : IUiPathStandaloneFlowch
         catch (UnauthorizedAccessException)
         {
         }
+    }
+
+    public static string ResolveProjectRoot(string xamlPath)
+    {
+        var dir = Path.GetDirectoryName(Path.GetFullPath(xamlPath));
+        while (!string.IsNullOrWhiteSpace(dir))
+        {
+            if (File.Exists(Path.Combine(dir, "project.json")))
+            {
+                return dir;
+            }
+
+            var parent = Directory.GetParent(dir);
+            if (parent is null || parent.FullName == dir)
+            {
+                break;
+            }
+
+            dir = parent.FullName;
+        }
+
+        return Path.GetDirectoryName(Path.GetFullPath(xamlPath)) ?? Directory.GetCurrentDirectory();
     }
 }

@@ -10,6 +10,10 @@ public sealed record UiPathAiReviewResult
 
     public required string Summary { get; init; }
 
+    public IReadOnlyList<UiPathAiReviewEvidence> Evidence { get; init; } = [];
+
+    public string? Interpretation { get; init; }
+
     public UiPathAiRiskLevel RiskLevel { get; init; }
 
     public IReadOnlyList<string> Strengths { get; init; } = [];

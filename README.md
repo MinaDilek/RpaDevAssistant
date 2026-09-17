@@ -54,6 +54,19 @@ UiPathStaticAnalysisResult
 UiPathQualityScore
 ```
 
+### UiPath compatibility behavior matrix
+
+Runtime compatibility and design experience are resolved as separate dimensions. `Windows` / `Windows-Legacy` describe the runtime target, while `Modern` / `Classic` describe activity usage detected from parsed workflows. This prevents compatibility-sensitive rules from relying on broad string matching.
+
+| Project signal | Runtime behavior | Activity behavior | Legacy UI activity rule (RPA016) |
+| --- | --- | --- | --- |
+| Windows | Modern and Classic activities are supported | Modern, Classic, Mixed, or Unknown is derived from activities | Runs because Windows is a modern-capable runtime |
+| Windows-Legacy | Classic activities are supported; modernization is a migration concern | Defaults to Classic when no stronger evidence exists | Suppressed to avoid per-activity migration noise |
+| Modern | Modern design experience is explicit or detected | Modern UI automation is preferred | Legacy UI activities are reported |
+| Classic | Classic design experience is explicit or detected | Classic activities are treated as intentional | Suppressed; migration can be reviewed separately |
+
+Cross-platform/Portable metadata is also recognized. It supports modern activities and treats detected Classic UI activities as incompatible migration candidates. Unknown metadata remains conservative and does not create compatibility-only findings without activity evidence.
+
 Rules implement `IUiPathAnalysisRule` and are registered through dependency injection. Each rule receives a project analysis context and returns findings independently. This keeps the engine ready for future rule enable/disable flags, severity overrides, company-specific rules, custom configuration, and rule profiles without binding the engine to a hard-coded switch statement.
 
 Severity levels:
@@ -1523,7 +1536,17 @@ Tauri installer output is expected under:
 frontend/src-tauri/target/release/bundle/nsis/
 ```
 
-The first MVP is unsigned. Windows SmartScreen may warn about the installer or executable until code signing is added.
+The Windows release workflow at `.github/workflows/windows-desktop-release.yml` validates backend/frontend code, publishes the sidecar, builds the NSIS installer, verifies a non-empty artifact, and uploads it. When `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD` repository secrets are configured, the installer is Authenticode-signed with a trusted timestamp. Unsigned builds may trigger Windows SmartScreen.
+
+Runtime configuration is centralized under the `RpaDevAssistant` configuration section and supports standard .NET environment overrides (`__` separator). Safe defaults are included in `src/RpaDevAssistant.Api/appsettings.json` for local desktop use. Configurable values include the desktop CORS allowlist, custom rule/profile storage files, analysis history root/retention, and official package metadata timeout/cache settings. Startup fails with a clear validation error for malformed origins, non-HTTPS metadata endpoints, or non-positive durations.
+
+Example overrides:
+
+```bash
+RpaDevAssistant__AllowedOrigins__0=http://127.0.0.1:5173
+RpaDevAssistant__Storage__AnalysisHistoryRoot=/path/to/local/history
+RpaDevAssistant__History__MaxSnapshotsPerProject=20
+```
 
 Desktop security notes:
 

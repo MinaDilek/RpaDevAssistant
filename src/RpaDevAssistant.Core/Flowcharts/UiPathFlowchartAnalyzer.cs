@@ -69,7 +69,23 @@ public sealed class UiPathFlowchartAnalyzer : IUiPathFlowchartAnalyzer
             var rawNodes = ReadNodes(flowchart, workflow.Analysis);
             var edges = ReadEdges(rawNodes);
             var nodes = rawNodes.Select(RemoveInternalProperties).ToArray();
-            var start = ResolveReference(ReadAttribute(flowchart, "StartNode")) ?? nodes.FirstOrDefault()?.Id;
+            var startNodeElement = flowchart.Elements().FirstOrDefault(e => e.Name.LocalName.EndsWith(".StartNode", StringComparison.OrdinalIgnoreCase));
+            string? startFromElement = null;
+            if (startNodeElement is not null)
+            {
+                var refChild = startNodeElement.Elements().FirstOrDefault(e => e.Name.LocalName.Equals("Reference", StringComparison.OrdinalIgnoreCase));
+                if (refChild is not null)
+                {
+                    startFromElement = ResolveReference(ReadAttribute(refChild, "Name")) ?? ResolveReference(refChild.Value);
+                }
+
+                startFromElement ??= ResolveReference(startNodeElement.Value);
+                startFromElement ??= startNodeElement.Elements().Select(ReadNodeId).FirstOrDefault(id => !string.IsNullOrWhiteSpace(id));
+            }
+
+            var start = ResolveReference(ReadAttribute(flowchart, "StartNode"))
+                ?? startFromElement
+                ?? nodes.FirstOrDefault()?.Id;
             var reachable = FindReachable(start, edges);
             var hasCycles = HasCycle(start, edges);
             var incoming = edges.GroupBy(edge => edge.TargetNodeId, Comparer).ToDictionary(group => group.Key, group => group.Count(), Comparer);
@@ -180,15 +196,23 @@ public sealed class UiPathFlowchartAnalyzer : IUiPathFlowchartAnalyzer
                 var id = ReadNodeId(element) ?? $"node-{index}";
                 var childActivity = FindFirstChildActivity(element, activitiesByPath);
                 var type = ResolveNodeType(element);
-                var displayName = ReadAttribute(element, "DisplayName") ?? childActivity?.DisplayName ?? id;
+                var firstElementName = FindFirstActivityElementName(element);
+                var isCommented = (childActivity is not null && UiPathFlowchartConversionPolicy.IsCommentedCodeBlock(childActivity.Name))
+                    || UiPathFlowchartConversionPolicy.IsCommentedCodeBlock(firstElementName);
+                var displayName = isCommented
+                    ? (childActivity?.DisplayName ?? firstElementName ?? "CommentOut")
+                    : (ReadAttribute(element, "DisplayName") ?? childActivity?.DisplayName ?? firstElementName ?? id);
+                var activityName = isCommented
+                    ? (childActivity?.Name ?? firstElementName ?? "CommentOut")
+                    : (childActivity?.Name ?? firstElementName ?? (type == UiPathFlowNodeType.Decision ? "FlowDecision" : type == UiPathFlowNodeType.Switch ? "FlowSwitch" : null));
                 return new UiPathFlowNode
                 {
                     Id = id,
                     Type = type,
                     DisplayName = displayName,
                     ActivityId = childActivity?.ActivityId,
-                    ActivityName = childActivity?.Name ?? (type == UiPathFlowNodeType.Decision ? "FlowDecision" : type == UiPathFlowNodeType.Switch ? "FlowSwitch" : null),
-                    IsExecutable = childActivity is not null && UiPathActivityClassifier.IsExecutable(childActivity),
+                    ActivityName = activityName,
+                    IsExecutable = !isCommented && childActivity is not null && UiPathActivityClassifier.IsExecutable(childActivity),
                     Properties = ReadProperties(element, childActivity),
                     PositionMetadata = TryReadLineInfo(element)
                 };
@@ -196,6 +220,40 @@ public sealed class UiPathFlowchartAnalyzer : IUiPathFlowchartAnalyzer
             .DistinctBy(node => node.Id, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
+
+    private static readonly HashSet<string> NonActivityContainerNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ActivityAction",
+        "DelegateInArgument",
+        "Dictionary",
+        "InArgument",
+        "InOutArgument",
+        "OutArgument",
+        "Variable",
+        "Target",
+        "Point",
+        "Size",
+        "PointCollection",
+        "Collection",
+        "Array"
+    };
+
+    private static string? FindFirstActivityElementName(XElement element)
+    {
+        return element.Elements()
+            .Where(d => !IsFlowNodeElement(d)
+                && !d.Name.LocalName.Contains('.', StringComparison.Ordinal)
+                && !NonActivityContainerNames.Contains(d.Name.LocalName))
+            .Select(d => d.Name.LocalName)
+            .FirstOrDefault()
+            ?? element.Descendants()
+                .Where(d => !IsFlowNodeElement(d)
+                    && !d.Name.LocalName.Contains('.', StringComparison.Ordinal)
+                    && !NonActivityContainerNames.Contains(d.Name.LocalName))
+                .Select(d => d.Name.LocalName)
+                .FirstOrDefault();
+    }
+
 
     private static IReadOnlyList<UiPathFlowEdge> ReadEdges(IReadOnlyList<UiPathFlowNode> nodes)
     {
@@ -275,13 +333,45 @@ public sealed class UiPathFlowchartAnalyzer : IUiPathFlowchartAnalyzer
 
     private static UiPathActivityInfo? FindFirstChildActivity(XElement nodeElement, IReadOnlyDictionary<string, UiPathActivityInfo> activitiesByPath)
     {
-        foreach (var descendant in nodeElement.Descendants())
+        var directChild = nodeElement.Elements()
+            .FirstOrDefault(d => !IsFlowNodeElement(d)
+                && !d.Name.LocalName.Contains('.', StringComparison.Ordinal)
+                && !NonActivityContainerNames.Contains(d.Name.LocalName));
+
+        if (directChild is not null && UiPathFlowchartConversionPolicy.IsCommentedCodeBlock(directChild.Name.LocalName))
         {
-            if (IsFlowNodeElement(descendant) || descendant.Name.LocalName.Contains('.', StringComparison.Ordinal))
+            var commentId = ReadAttribute(directChild, "WorkflowViewState.IdRef") ?? ReadAttribute(directChild, "IdRef");
+            if (!string.IsNullOrWhiteSpace(commentId))
             {
-                continue;
+                var match = activitiesByPath.Values.FirstOrDefault(activity => Comparer.Equals(activity.ActivityId, commentId) || Comparer.Equals(activity.StableId, commentId));
+                if (match is not null)
+                {
+                    return match;
+                }
             }
 
+            return new UiPathActivityInfo
+            {
+                ActivityId = commentId ?? "commentout",
+                Name = directChild.Name.LocalName,
+                DisplayName = ReadAttribute(directChild, "DisplayName") ?? directChild.Name.LocalName,
+                TypeName = directChild.Name.LocalName,
+                XamlFile = string.Empty
+            };
+        }
+
+        var candidates = nodeElement.Elements()
+            .Where(d => !IsFlowNodeElement(d)
+                && !d.Name.LocalName.Contains('.', StringComparison.Ordinal)
+                && !NonActivityContainerNames.Contains(d.Name.LocalName))
+            .Concat(nodeElement.Descendants()
+                .Where(d => !IsFlowNodeElement(d)
+                    && !d.Name.LocalName.Contains('.', StringComparison.Ordinal)
+                    && !NonActivityContainerNames.Contains(d.Name.LocalName)
+                    && !d.Ancestors().Any(a => UiPathFlowchartConversionPolicy.IsCommentedCodeBlock(a.Name.LocalName))));
+
+        foreach (var descendant in candidates)
+        {
             var id = ReadAttribute(descendant, "WorkflowViewState.IdRef") ?? ReadAttribute(descendant, "IdRef");
             if (!string.IsNullOrWhiteSpace(id))
             {
@@ -311,9 +401,31 @@ public sealed class UiPathFlowchartAnalyzer : IUiPathFlowchartAnalyzer
             ["__element"] = element.ToString(SaveOptions.DisableFormatting)
         };
 
+        var directActivity = element.Elements()
+            .FirstOrDefault(d => !IsFlowNodeElement(d)
+                && !d.Name.LocalName.Contains('.', StringComparison.Ordinal)
+                && !NonActivityContainerNames.Contains(d.Name.LocalName))
+            ?? element.Descendants()
+                .FirstOrDefault(d => !IsFlowNodeElement(d)
+                    && !d.Name.LocalName.Contains('.', StringComparison.Ordinal)
+                    && !NonActivityContainerNames.Contains(d.Name.LocalName));
+
+        if (directActivity is not null && !string.IsNullOrWhiteSpace(directActivity.Name.NamespaceName))
+        {
+            properties["__namespace"] = directActivity.Name.NamespaceName;
+        }
+
         foreach (var attribute in element.Attributes().Where(attribute => !attribute.IsNamespaceDeclaration))
         {
             properties[attribute.Name.LocalName] = attribute.Value;
+        }
+
+        if (directActivity is not null)
+        {
+            foreach (var attribute in directActivity.Attributes().Where(attribute => !attribute.IsNamespaceDeclaration))
+            {
+                properties.TryAdd(attribute.Name.LocalName, attribute.Value);
+            }
         }
 
         if (activity is not null)
@@ -326,6 +438,7 @@ public sealed class UiPathFlowchartAnalyzer : IUiPathFlowchartAnalyzer
 
         return properties;
     }
+
 
     private static UiPathFlowNode RemoveInternalProperties(UiPathFlowNode node)
     {

@@ -32,6 +32,16 @@ public sealed record UiPathCustomRuleDefinition
 
     public bool Enabled { get; init; } = true;
 
+    public bool IsTemplate { get; init; }
+
+    public string? TemplateId { get; init; }
+
+    public string? TemplateSource { get; init; }
+
+    public DateTimeOffset? CreatedAtUtc { get; init; }
+
+    public DateTimeOffset? UpdatedAtUtc { get; init; }
+
     public double Weight { get; init; } = 1;
 
     public double MaxPenalty { get; init; } = 10;

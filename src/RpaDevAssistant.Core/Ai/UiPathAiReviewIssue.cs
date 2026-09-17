@@ -10,6 +10,10 @@ public sealed record UiPathAiReviewIssue
 
     public required string Evidence { get; init; }
 
+    public IReadOnlyList<UiPathAiReviewEvidence> EvidenceItems { get; init; } = [];
+
+    public string? Interpretation { get; init; }
+
     public required string Recommendation { get; init; }
 
     public string? WorkflowPath { get; init; }

@@ -4,6 +4,8 @@ public sealed record UiPathProjectAnswer
 {
     public required string Answer { get; init; }
 
+    public string? Interpretation { get; init; }
+
     public UiPathProjectAnswerConfidence Confidence { get; init; }
 
     public UiPathProjectAnswerType AnswerType { get; init; }

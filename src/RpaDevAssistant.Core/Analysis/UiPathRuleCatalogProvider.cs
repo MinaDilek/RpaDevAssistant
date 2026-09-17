@@ -54,10 +54,18 @@ public sealed class UiPathRuleCatalogProvider : IUiPathRuleCatalogProvider
                 Scope = rule.Scope,
                 EnabledByDefault = rule.EnabledByDefault,
                 IsBuiltIn = rule.IsBuiltIn,
+                IsTemplate = rule.IsTemplate,
+                TemplateId = rule.TemplateId,
+                TemplateSource = rule.TemplateSource,
                 SupportsAggregation = rule.SupportsAggregation,
                 DefaultWeight = rule.DefaultWeight,
                 DefaultMaxPenalty = rule.DefaultMaxPenalty,
-                Tags = rule.Tags
+                Tags = rule.Tags,
+                ApplicableProjectTypes = rule.ApplicableProjectTypes,
+                CompatibilityNotes = localizer.Get(
+                    rule.CompatibilityNotesKey ?? "RuleCatalog.AllProjectTypes",
+                    locale,
+                    fallback: string.Empty)
             })
             .ToArray();
     }

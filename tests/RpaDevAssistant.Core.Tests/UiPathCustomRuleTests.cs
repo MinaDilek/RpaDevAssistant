@@ -189,6 +189,29 @@ public sealed class UiPathCustomRuleTests
     }
 
     [Fact]
+    public void Repository_PersistsCustomRuleTemplateMetadata()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"custom-rule-templates-{Guid.NewGuid():N}.json");
+        var repository = new FileUiPathCustomRuleRepository(new UiPathCustomRuleOptions { ConfigFilePath = path });
+        var template = Rule("TPL-CUSTOM-001", UiPathRuleScope.Activity, [Condition("Activity.Name", UiPathRuleConditionOperator.Equals, "Delay")]) with
+        {
+            Name = "No Delay Template",
+            Enabled = false,
+            IsTemplate = true,
+            TemplateSource = "Custom"
+        };
+
+        var saved = repository.SaveRule(template);
+        var reloaded = new FileUiPathCustomRuleRepository(new UiPathCustomRuleOptions { ConfigFilePath = path }).GetRule("TPL-CUSTOM-001");
+
+        Assert.True(saved.IsTemplate);
+        Assert.Equal("Custom", reloaded?.TemplateSource);
+        Assert.False(reloaded?.Enabled);
+        Assert.NotNull(reloaded?.CreatedAtUtc);
+        Assert.NotNull(reloaded?.UpdatedAtUtc);
+    }
+
+    [Fact]
     public void Repository_ImportExportRoundTripsAndSkipsDuplicate()
     {
         var repository = new InMemoryUiPathCustomRuleRepository([Rule("CUSTOM-006", UiPathRuleScope.Activity, [Condition("Activity.Name", UiPathRuleConditionOperator.Equals, "Delay")])]);
@@ -208,6 +231,22 @@ public sealed class UiPathCustomRuleTests
         var config = Assert.Single(profile.Rules.Where(rule => rule.RuleId == "CUSTOM-007"));
         Assert.Equal(7, config.Weight);
         Assert.Equal(11, config.MaxPenalty);
+    }
+
+    [Fact]
+    public void ProfileProvider_DoesNotEnableTemplatesAsRules()
+    {
+        var repository = new InMemoryUiPathCustomRuleRepository([
+            Rule("TPL-CUSTOM-002", UiPathRuleScope.Activity, [Condition("Activity.Name", UiPathRuleConditionOperator.Equals, "Delay")]) with
+            {
+                Enabled = false,
+                IsTemplate = true,
+                TemplateSource = "Custom"
+            }
+        ]);
+        var profile = new BuiltInUiPathRuleProfileProvider(repository).GetProfile("default");
+
+        Assert.DoesNotContain(profile.Rules, rule => rule.RuleId == "TPL-CUSTOM-002");
     }
 
     [Fact]

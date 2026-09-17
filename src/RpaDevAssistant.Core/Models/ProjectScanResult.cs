@@ -1,6 +1,7 @@
 namespace RpaDevAssistant.Core.Models;
 
 using RpaDevAssistant.Core.Analysis;
+using RpaDevAssistant.Core.Compatibility;
 using RpaDevAssistant.Core.Dependencies;
 using RpaDevAssistant.Core.Flowcharts;
 
@@ -14,7 +15,11 @@ public sealed class ProjectScanResult
 
     public string? Compatibility { get; set; }
 
+    public UiPathCompatibilityBehavior? CompatibilityBehavior { get; set; }
+
     public bool IsReFramework { get; set; }
+
+    public UiPathReFrameworkAssessment? ReFrameworkAssessment { get; set; }
 
     public int WorkflowCount => Workflows.Count;
 
@@ -88,6 +93,8 @@ public sealed class ProjectScanResult
     public UiPathDependencySummary? DependencyAnalysis { get; set; }
 
     public UiPathFlowchartAnalysisSummary? FlowchartAnalysis { get; set; }
+
+    public UiPathScanPerformanceMetrics Performance { get; set; } = new();
 
     public List<UiPathFolderInfo> Folders { get; } = [];
 

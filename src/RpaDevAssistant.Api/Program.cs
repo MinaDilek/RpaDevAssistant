@@ -20,10 +20,15 @@ using RpaDevAssistant.Core.Fixes.Apply;
 using RpaDevAssistant.Core.Fixes.Providers;
 using RpaDevAssistant.Infrastructure.OpenAI;
 using RpaDevAssistant.Core.Localization;
+using RpaDevAssistant.Core.Config;
+using RpaDevAssistant.Core.Compatibility;
+using RpaDevAssistant.Core.ProcessUnderstanding;
+using RpaDevAssistant.Api.Services;
 
 DotEnvLoader.Load(Path.Combine(Directory.GetCurrentDirectory(), ".env.local"));
 
 var builder = WebApplication.CreateBuilder(args);
+var runtimeConfiguration = RpaDevAssistantRuntimeConfiguration.Load(builder.Configuration);
 
 builder.Services.AddControllers()
     .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
@@ -32,7 +37,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("DesktopLocalhost", policy =>
     {
-        policy.SetIsOriginAllowed(IsAllowedDesktopOrigin)
+        policy.SetIsOriginAllowed(origin => IsAllowedDesktopOrigin(origin, runtimeConfiguration.AllowedOrigins))
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
@@ -41,10 +46,14 @@ builder.Services.AddSingleton<IUiPathXamlParser, UiPathXamlParser>();
 builder.Services.AddSingleton<IUiPathProjectValidator, UiPathProjectValidator>();
 builder.Services.AddSingleton<IUiPathProjectScanner, UiPathProjectScanner>();
 builder.Services.AddSingleton<IUiPathExpressionClassifier, UiPathExpressionClassifier>();
+builder.Services.AddSingleton<IUiPathConfigAnalysisService, UiPathConfigAnalysisService>();
 builder.Services.AddSingleton<IUiPathSelectorAnalyzer, UiPathSelectorAnalyzer>();
 builder.Services.AddSingleton<IUiPathWorkflowMetricsCalculator, UiPathWorkflowMetricsCalculator>();
 builder.Services.AddSingleton<IUiPathPackageActivityMapper, UiPathPackageActivityMapper>();
+builder.Services.AddSingleton<IUiPathPackageMetadataProvider>(_ =>
+    new NuGetUiPathPackageMetadataProvider(new HttpClient(), runtimeConfiguration.PackageMetadata));
 builder.Services.AddSingleton<IUiPathDependencyAnalyzer, UiPathDependencyAnalyzer>();
+builder.Services.AddSingleton<IUiPathCompatibilityResolver, UiPathCompatibilityResolver>();
 builder.Services.AddSingleton<IUiPathFlowchartAnalyzer, UiPathFlowchartAnalyzer>();
 builder.Services.AddSingleton<IUiPathFlowchartConversionService, UiPathFlowchartConversionService>();
 builder.Services.AddSingleton<IUiPathFlowchartConversionApplyService, UiPathFlowchartConversionApplyService>();
@@ -52,8 +61,8 @@ builder.Services.AddSingleton<IUiPathStandaloneFlowchartConverter, UiPathStandal
 builder.Services.AddSingleton<IRpaDevAssistantLocalizer, RpaDevAssistantLocalizer>();
 builder.Services.AddSingleton<UiPathAnalysisFindingLocalizer>();
 builder.Services.AddSingleton<UiPathFixSuggestionLocalizer>();
-builder.Services.AddSingleton(new UiPathCustomRuleOptions());
-builder.Services.AddSingleton(new UiPathRuleProfileOptions());
+builder.Services.AddSingleton(new UiPathCustomRuleOptions { ConfigFilePath = runtimeConfiguration.CustomRulesFilePath });
+builder.Services.AddSingleton(new UiPathRuleProfileOptions { ConfigFilePath = runtimeConfiguration.RuleProfilesFilePath });
 builder.Services.AddSingleton<IUiPathCustomRuleValidator, UiPathCustomRuleValidator>();
 builder.Services.AddSingleton<IUiPathCustomRuleRepository, FileUiPathCustomRuleRepository>();
 builder.Services.AddSingleton<IUiPathCustomRuleEvaluator, UiPathCustomRuleEvaluator>();
@@ -72,12 +81,27 @@ builder.Services.AddSingleton<IUiPathAnalysisRule, ExcessiveUiTimeoutRule>();
 builder.Services.AddSingleton<IUiPathAnalysisRule, UnrealisticallyLowUiTimeoutRule>();
 builder.Services.AddSingleton<IUiPathAnalysisRule, ContinueOnErrorEnabledRule>();
 builder.Services.AddSingleton<IUiPathAnalysisRule, ExcessiveContinueOnErrorUsageRule>();
+builder.Services.AddSingleton<IUiPathAnalysisRule, BusinessRuleExceptionHandlingRule>();
+builder.Services.AddSingleton<IUiPathAnalysisRule, ArgumentNamingConventionRule>();
+builder.Services.AddSingleton<IUiPathAnalysisRule, VariableNamingConventionRule>();
+builder.Services.AddSingleton<IUiPathSymbolUsageAnalyzer, UiPathSymbolUsageAnalyzer>();
+builder.Services.AddSingleton<IUiPathAnalysisRule, UnusedVariableRule>();
+builder.Services.AddSingleton<IUiPathAnalysisRule, UnusedArgumentRule>();
+builder.Services.AddSingleton<IUiPathAnalysisRule, ArgumentDirectionMismatchRule>();
+builder.Services.AddSingleton<IUiPathAnalysisRule, UnnecessaryInOutArgumentRule>();
+builder.Services.AddSingleton<IUiPathAnalysisRule, InvalidArgumentTypeDeclarationRule>();
+builder.Services.AddSingleton<IUiPathAnalysisRule, OverlyBroadVariableScopeRule>();
+builder.Services.AddSingleton<IUiPathAnalysisRule, ShadowedVariableRule>();
+builder.Services.AddSingleton<IUiPathAnalysisRule, InvalidInvokeWorkflowArgumentMappingRule>();
+builder.Services.AddSingleton<IUiPathAnalysisRule, MissingInvokeWorkflowArgumentMappingRule>();
+builder.Services.AddSingleton<IUiPathAnalysisRule, InvokeWorkflowArgumentDirectionMismatchRule>();
 builder.Services.AddSingleton<IUiPathAnalysisRule, MissingExplicitTimeoutOnCriticalUiActivityRule>();
 builder.Services.AddSingleton<IUiPathAnalysisRule, LegacyUiAutomationActivityRule>();
 builder.Services.AddSingleton<IUiPathAnalysisRule, SelectorUsesIdxAttributeRule>();
 builder.Services.AddSingleton<IUiPathAnalysisRule, PotentiallyUnstableSelectorAttributeRule>();
 builder.Services.AddSingleton<IUiPathAnalysisRule, OverlyComplexSelectorRule>();
 builder.Services.AddSingleton<IUiPathAnalysisRule, HardCodedAbsoluteFilePathRule>();
+builder.Services.AddSingleton<IUiPathAnalysisRule, HardCodedUrlRule>();
 builder.Services.AddSingleton<IUiPathAnalysisRule, HardCodedEmailAddressRule>();
 builder.Services.AddSingleton<IUiPathAnalysisRule, HttpRequestWithoutExplicitTimeoutRule>();
 builder.Services.AddSingleton<IUiPathAnalysisRule, HttpRequestWithoutLocalErrorHandlingRule>();
@@ -87,6 +111,9 @@ builder.Services.AddSingleton<IUiPathAnalysisRule, PossiblyUnusedDependencyRule>
 builder.Services.AddSingleton<IUiPathAnalysisRule, PackageVersionAlignmentRiskRule>();
 builder.Services.AddSingleton<IUiPathAnalysisRule, MixedModernClassicActivityUsageRule>();
 builder.Services.AddSingleton<IUiPathAnalysisRule, LegacyPackageIndicatorRule>();
+builder.Services.AddSingleton<IUiPathAnalysisRule, CircularWorkflowReferenceRule>();
+builder.Services.AddSingleton<IUiPathAnalysisRule, UnusedWorkflowRule>();
+builder.Services.AddSingleton<IUiPathAnalysisRule, FixedDelaysWithoutStateBasedWaitRule>();
 builder.Services.AddSingleton<IUiPathRuleEngine, UiPathRuleEngine>();
 builder.Services.AddSingleton<IUiPathRuleProfileProvider, BuiltInUiPathRuleProfileProvider>();
 builder.Services.AddSingleton<IUiPathRuleCatalog, UiPathRuleCatalog>();
@@ -96,6 +123,8 @@ builder.Services.AddSingleton<IUiPathRuleCatalogProvider>(serviceProvider => new
     serviceProvider.GetRequiredService<IRpaDevAssistantLocalizer>()));
 builder.Services.AddSingleton<IUiPathQualityScoringEngine, UiPathQualityScoringEngine>();
 builder.Services.AddSingleton<IUiPathProjectAnalyzer, UiPathProjectAnalyzer>();
+builder.Services.AddSingleton<ICurrentUiPathAnalysisStore, CurrentUiPathAnalysisStore>();
+builder.Services.AddSingleton<IProcessPddAnalysisService, ProcessPddAnalysisService>();
 builder.Services.AddSingleton<IUiPathAnalysisReportBuilder, UiPathAnalysisReportBuilder>();
 builder.Services.AddSingleton<IUiPathAnalysisReportService, UiPathAnalysisReportService>();
 builder.Services.AddSingleton<IUiPathReportExporter, JsonUiPathReportExporter>();
@@ -107,6 +136,7 @@ builder.Services.AddSingleton(_ => new UiPathAiReviewOptions());
 builder.Services.AddSingleton<IUiPathAiReviewContextBuilder, UiPathAiReviewContextBuilder>();
 builder.Services.AddSingleton<IUiPathAiPromptBuilder, UiPathAiPromptBuilder>();
 builder.Services.AddSingleton<IUiPathWorkflowGraphBuilder, UiPathWorkflowGraphBuilder>();
+builder.Services.AddSingleton<UiPathReFrameworkAnalyzer>();
 builder.Services.AddSingleton<IUiPathProjectQuestionClassifier, UiPathProjectQuestionClassifier>();
 builder.Services.AddSingleton<IUiPathProjectRetriever, UiPathProjectRetriever>();
 builder.Services.AddSingleton<IUiPathProjectAssistantPromptBuilder, UiPathProjectAssistantPromptBuilder>();
@@ -147,7 +177,11 @@ builder.Services.AddSingleton<IUiPathBackupRepository, UiPathBackupRepository>()
 builder.Services.AddSingleton<IUiPathRestoreAuditLogger, UiPathRestoreAuditLogger>();
 builder.Services.AddSingleton<IUiPathBackupRestoreService, UiPathBackupRestoreService>();
 builder.Services.AddSingleton<IUiPathUndoService, UiPathUndoService>();
-builder.Services.AddSingleton(new UiPathAnalysisHistoryOptions());
+builder.Services.AddSingleton(new UiPathAnalysisHistoryOptions
+{
+    StorageRoot = runtimeConfiguration.AnalysisHistoryRoot,
+    MaxSnapshotsPerProject = runtimeConfiguration.MaxHistorySnapshotsPerProject
+});
 builder.Services.AddSingleton<IUiPathAnalysisHistoryService, UiPathAnalysisHistoryService>();
 
 var app = builder.Build();
@@ -157,17 +191,16 @@ app.MapControllers();
 
 app.Run();
 
-static bool IsAllowedDesktopOrigin(string origin)
+static bool IsAllowedDesktopOrigin(string origin, IReadOnlySet<string> configuredOrigins)
 {
     if (string.IsNullOrWhiteSpace(origin) || !Uri.TryCreate(origin, UriKind.Absolute, out var uri))
     {
         return false;
     }
 
-    var configuredOrigins = ReadConfiguredOrigins();
     if (configuredOrigins.Count > 0)
     {
-        return configuredOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
+        return configuredOrigins.Contains(origin.TrimEnd('/'));
     }
 
     if (string.Equals(uri.Scheme, "tauri", StringComparison.OrdinalIgnoreCase)
@@ -185,19 +218,6 @@ static bool IsAllowedDesktopOrigin(string origin)
     return string.Equals(uri.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase)
         || string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase)
         || string.Equals(uri.Host, "tauri.localhost", StringComparison.OrdinalIgnoreCase);
-}
-
-static IReadOnlySet<string> ReadConfiguredOrigins()
-{
-    var configuredOrigins = Environment.GetEnvironmentVariable("RPADA_ALLOWED_ORIGINS");
-    if (!string.IsNullOrWhiteSpace(configuredOrigins))
-    {
-        return configuredOrigins
-            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-    }
-
-    return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 }
 
 public partial class Program

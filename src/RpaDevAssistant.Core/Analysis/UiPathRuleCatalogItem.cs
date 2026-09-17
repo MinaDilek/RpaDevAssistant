@@ -28,6 +28,12 @@ public sealed record UiPathRuleCatalogItem
 
     public bool IsCustom => !IsBuiltIn;
 
+    public bool IsTemplate { get; init; }
+
+    public string? TemplateId { get; init; }
+
+    public string? TemplateSource { get; init; }
+
     public string Source => IsBuiltIn ? "BuiltIn" : "Custom";
 
     public bool SupportsAggregation { get; init; }
@@ -37,4 +43,8 @@ public sealed record UiPathRuleCatalogItem
     public double DefaultMaxPenalty { get; init; }
 
     public IReadOnlyList<string> Tags { get; init; } = [];
+
+    public IReadOnlyList<string> ApplicableProjectTypes { get; init; } = [];
+
+    public string? CompatibilityNotes { get; init; }
 }

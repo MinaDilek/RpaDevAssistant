@@ -1,0 +1,81 @@
+/* Config Analysis & Usage Graph Styles */
+
+.config-usage-graph {
+  display: grid;
+  gap: 12px;
+}
+
+.config-usage-node {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.32fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.config-key-node,
+.config-workflow-node {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.config-key-node {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  border-color: #bfdbfe;
+  background: #f8fbff;
+}
+
+.config-key-node strong,
+.config-workflow-node strong {
+  color: #0f172a;
+  overflow-wrap: anywhere;
+}
+
+.config-key-node span,
+.config-workflow-node span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.config-usage-edges {
+  display: grid;
+  gap: 10px;
+}
+
+.config-workflow-node {
+  position: relative;
+  display: grid;
+  gap: 8px;
+}
+
+.config-workflow-node::before {
+  content: "";
+  position: absolute;
+  top: 22px;
+  left: -12px;
+  width: 12px;
+  border-top: 1px solid #cbd5e1;
+}
+
+.config-workflow-node ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.config-workflow-node li {
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

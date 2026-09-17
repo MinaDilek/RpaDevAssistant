@@ -102,7 +102,25 @@ public sealed class UiPathAnalysisHistoryService : IUiPathAnalysisHistoryService
         var snapshots = LoadSnapshots(projectPath);
         var baseline = snapshots.FirstOrDefault(snapshot => snapshot.SnapshotId.Equals(baselineSnapshotId, StringComparison.OrdinalIgnoreCase));
         var target = snapshots.FirstOrDefault(snapshot => snapshot.SnapshotId.Equals(targetSnapshotId, StringComparison.OrdinalIgnoreCase));
-        return baseline is null || target is null ? null : CompareSnapshots(baseline, target);
+        if (baseline is not null && target is not null)
+        {
+            return CompareSnapshots(baseline, target);
+        }
+
+        var allSnapshots = LoadAllSnapshots();
+        baseline = allSnapshots.FirstOrDefault(snapshot => snapshot.SnapshotId.Equals(baselineSnapshotId, StringComparison.OrdinalIgnoreCase));
+        target = allSnapshots.FirstOrDefault(snapshot => snapshot.SnapshotId.Equals(targetSnapshotId, StringComparison.OrdinalIgnoreCase));
+        if (baseline is null || target is null)
+        {
+            return null;
+        }
+
+        if (!baseline.ProjectIdentity.ProjectId.Equals(target.ProjectIdentity.ProjectId, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return CompareSnapshots(baseline, target);
     }
 
     public UiPathAnalysisComparison? CompareLatestWithPrevious(string projectPath)

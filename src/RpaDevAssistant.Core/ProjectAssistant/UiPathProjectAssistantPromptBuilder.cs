@@ -34,7 +34,7 @@ public sealed class UiPathProjectAssistantPromptBuilder : IUiPathProjectAssistan
         }
 
         builder.AppendLine();
-        builder.AppendLine("Return structured JSON with: answer, confidence, answerType, relatedWorkflows, relatedActivities, relatedRuleIds, reasoningSummary.");
+        builder.AppendLine("Return structured JSON with: answer, interpretation, confidence, answerType, relatedWorkflows, relatedActivities, relatedRuleIds, reasoningSummary.");
 
         return new UiPathProjectAssistantPrompt
         {
@@ -46,6 +46,8 @@ public sealed class UiPathProjectAssistantPromptBuilder : IUiPathProjectAssistan
                 Do not invent workflows, activities, dependencies, findings, execution results, or file contents.
                 If evidence is insufficient, say so explicitly.
                 Separate facts from interpretation.
+                Evidence is supplied by the application and must not be rewritten or invented.
+                Put conclusions only in interpretation; identifiers must reference supplied evidence.
                 Prefer concise actionable answers.
                 Mention workflow names when relevant.
                 Do not expose redacted secrets.

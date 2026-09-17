@@ -43,14 +43,22 @@ public sealed class FileUiPathCustomRuleRepository : IUiPathCustomRuleRepository
             throw new UiPathCustomRuleValidationException(validation.Errors);
         }
 
+        var existingRule = store.Rules.FirstOrDefault(existing => existing.Id.Equals(rule.Id, StringComparison.OrdinalIgnoreCase));
+        var now = DateTimeOffset.UtcNow;
+        var ruleToSave = rule with
+        {
+            CreatedAtUtc = rule.CreatedAtUtc ?? existingRule?.CreatedAtUtc ?? now,
+            UpdatedAtUtc = now
+        };
+
         var rules = store.Rules
             .Where(existing => !existing.Id.Equals(rule.Id, StringComparison.OrdinalIgnoreCase))
-            .Append(rule)
+            .Append(ruleToSave)
             .OrderBy(existing => existing.Id, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         SaveStore(store with { Rules = rules });
-        return rule;
+        return ruleToSave;
     }
 
     public UiPathCustomRuleImportResult ImportRules(IEnumerable<UiPathCustomRuleDefinition> rules, bool overwrite = false)

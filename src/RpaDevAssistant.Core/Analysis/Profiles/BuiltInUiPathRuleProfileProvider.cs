@@ -128,10 +128,10 @@ public sealed class BuiltInUiPathRuleProfileProvider : IUiPathRuleProfileProvide
             new UiPathRuleConfiguration
             {
                 RuleId = "RPA015",
-                Enabled = true,
+                Enabled = false,
                 Weight = 1,
                 MaxPenalty = 8,
-                Description = "Missing Explicit Timeout on Critical UI Activity"
+                Description = "Missing Explicit Timeout on Critical UI Activity - disabled by default because timeout defaults vary by UiPath project type."
             },
             new UiPathRuleConfiguration
             {
@@ -244,6 +244,142 @@ public sealed class BuiltInUiPathRuleProfileProvider : IUiPathRuleProfileProvide
                 Weight = 2,
                 MaxPenalty = 8,
                 Description = "Legacy Package Indicator"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA030",
+                Enabled = true,
+                Weight = 5,
+                MaxPenalty = 15,
+                Description = "BusinessRuleException Handling"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA031",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 5,
+                Description = "Argument Naming Convention"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA032",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 5,
+                Description = "Variable Naming Convention"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA033",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 8,
+                Description = "Unused Variable"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA034",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 8,
+                Description = "Unused Argument"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA035",
+                Enabled = true,
+                Weight = 3,
+                MaxPenalty = 10,
+                Description = "Hard-Coded URL"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA036",
+                Enabled = true,
+                Weight = 10,
+                MaxPenalty = 20,
+                Description = "Circular Workflow Reference"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA037",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 8,
+                Description = "Unused Workflow"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA038",
+                Enabled = true,
+                Weight = 2,
+                MaxPenalty = 10,
+                Description = "Argument Direction Mismatch"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA039",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 6,
+                Description = "Unnecessary InOut Argument"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA040",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 8,
+                Description = "Invalid Argument Type Declaration"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA041",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 6,
+                Description = "Overly Broad Variable Scope"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA042",
+                Enabled = true,
+                Weight = 2,
+                MaxPenalty = 10,
+                Description = "Shadowed Variable"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA043",
+                Enabled = true,
+                Weight = 2,
+                MaxPenalty = 10,
+                Description = "Invalid Invoke Workflow Argument Mapping"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA044",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 8,
+                Description = "Missing Invoke Workflow Argument Mapping"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA045",
+                Enabled = true,
+                Weight = 2,
+                MaxPenalty = 10,
+                Description = "Invoke Workflow Argument Direction Mismatch"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA046",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 5,
+                Description = "Fixed Delays Without State-Based Wait"
             }
         ]
     };
@@ -289,6 +425,7 @@ public sealed class BuiltInUiPathRuleProfileProvider : IUiPathRuleProfileProvide
         }
 
         var customConfigurations = customRuleRepository.GetRules()
+            .Where(rule => !rule.IsTemplate)
             .Select(rule => new UiPathRuleConfiguration
             {
                 RuleId = rule.Id,

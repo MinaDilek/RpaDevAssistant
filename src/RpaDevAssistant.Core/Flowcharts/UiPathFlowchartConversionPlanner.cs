@@ -4,7 +4,7 @@ public static class UiPathFlowchartConversionPlanner
 {
     private static readonly StringComparer Comparer = StringComparer.OrdinalIgnoreCase;
 
-    public static UiPathFlowchartConversionPlan BuildPlan(UiPathFlowchartGraph graph, UiPathFlowchartConversionAssessment assessment)
+    public static UiPathFlowchartConversionPlan BuildPlan(UiPathFlowchartGraph graph, UiPathFlowchartConversionAssessment assessment, string? projectRoot = null)
     {
         var mappings = new List<UiPathConversionMapping>();
         var preview = new UiPathSequencePreviewNode
@@ -40,6 +40,23 @@ public static class UiPathFlowchartConversionPlanner
             steps.Add("Keep shared merge nodes as continuation activities after branch previews.");
         }
 
+        if (graph.Nodes.Any(UiPathFlowchartConversionPolicy.IsCommentedCodeBlock))
+        {
+            steps.Add("Exclude commented-out activity blocks from the generated Sequence.");
+        }
+
+        var customDetections = UiPathCustomActivityReplacementResolver.DetectCustomActivities(graph, projectRoot);
+
+        if (customDetections.Count > 0)
+        {
+            steps.Add($"Detected {customDetections.Count} custom/transitive dependency activity/activities with suggested standard UiPath replacements.");
+            foreach (var detection in customDetections.Where(d => d.CustomPackageFamily?.Contains("Transitive", StringComparison.OrdinalIgnoreCase) == true))
+            {
+                warnings.Add($"Transitive dependency: '{detection.ActivityName}' is used without '{detection.SuggestedPackage}' directly declared in project.json ({detection.CustomPackageFamily}).");
+            }
+        }
+
+
         return new UiPathFlowchartConversionPlan
         {
             WorkflowPath = graph.WorkflowPath,
@@ -48,6 +65,7 @@ public static class UiPathFlowchartConversionPlanner
             Mappings = mappings,
             PreviewTree = preview,
             Warnings = warnings,
+            CustomActivityDetections = customDetections,
             ManualReviewItems = assessment.ConversionLevel == UiPathFlowchartConversionLevel.Safe
                 ? []
                 : ["Review branch semantics in UiPath Studio before implementing a real conversion."]
@@ -66,6 +84,12 @@ public static class UiPathFlowchartConversionPlanner
         var guard = 0;
         while (!string.IsNullOrWhiteSpace(current) && byId.TryGetValue(current, out var node) && emitted.Add(current) && guard++ < graph.Nodes.Count + 5)
         {
+            if (UiPathFlowchartConversionPolicy.IsCommentedCodeBlock(node))
+            {
+                current = NextContinuation(node, bySource, incomingCount);
+                continue;
+            }
+
             var targetPath = $"Sequence/{output.Count}";
             var previewNode = BuildPreviewNode(node, byId, bySource, incomingCount, mappings, targetPath);
             output.Add(previewNode);
@@ -85,7 +109,9 @@ public static class UiPathFlowchartConversionPlanner
             current = NextContinuation(node, bySource, incomingCount);
         }
 
-        foreach (var unreachable in graph.Nodes.Where(node => !emitted.Contains(node.Id)))
+        foreach (var unreachable in graph.Nodes.Where(node =>
+                     !emitted.Contains(node.Id)
+                     && !UiPathFlowchartConversionPolicy.IsCommentedCodeBlock(node)))
         {
             output.Add(new UiPathSequencePreviewNode
             {
@@ -122,7 +148,7 @@ public static class UiPathFlowchartConversionPlanner
                 var loopCondition = loopBranch.BranchType == UiPathFlowBranchType.False
                     ? $"Not ({node.Properties.GetValueOrDefault("Condition")})"
                     : node.Properties.GetValueOrDefault("Condition");
-                var loopTarget = byId.GetValueOrDefault(loopBranch.TargetNodeId);
+                var loopTarget = ResolvePreviewTarget(loopBranch.TargetNodeId, byId, bySource, incomingCount);
                 var loopBody = loopTarget is null
                     ? []
                     : new[] { BuildPreviewNode(loopTarget, byId, bySource, incomingCount, mappings, $"{path}/While") };
@@ -140,7 +166,8 @@ public static class UiPathFlowchartConversionPlanner
             var children = new List<UiPathSequencePreviewNode>();
             foreach (var branch in branches)
             {
-                if (byId.TryGetValue(branch.TargetNodeId, out var target))
+                var target = ResolvePreviewTarget(branch.TargetNodeId, byId, bySource, incomingCount);
+                if (target is not null)
                 {
                     children.Add(new UiPathSequencePreviewNode
                     {
@@ -167,15 +194,16 @@ public static class UiPathFlowchartConversionPlanner
         if (node.Type == UiPathFlowNodeType.Switch)
         {
             var children = Branches(node.Id, bySource)
-                .Where(edge => byId.ContainsKey(edge.TargetNodeId))
-                .Select(edge => new UiPathSequencePreviewNode
+                .Select(edge => new { Edge = edge, Target = ResolvePreviewTarget(edge.TargetNodeId, byId, bySource, incomingCount) })
+                .Where(item => item.Target is not null)
+                .Select(item => new UiPathSequencePreviewNode
                 {
-                    Type = edge.BranchType == UiPathFlowBranchType.Otherwise ? "Default" : "Case",
-                    DisplayName = edge.Label,
-                    SourceNodeId = edge.TargetNodeId,
-                    Children = incomingCount.GetValueOrDefault(edge.TargetNodeId) > 1
+                    Type = item.Edge.BranchType == UiPathFlowBranchType.Otherwise ? "Default" : "Case",
+                    DisplayName = item.Edge.Label,
+                    SourceNodeId = item.Target!.Id,
+                    Children = incomingCount.GetValueOrDefault(item.Target.Id) > 1
                         ? []
-                        : [BuildPreviewNode(byId[edge.TargetNodeId], byId, bySource, incomingCount, mappings, $"{path}/{edge.Label ?? edge.BranchType.ToString()}")]
+                        : [BuildPreviewNode(item.Target, byId, bySource, incomingCount, mappings, $"{path}/{item.Edge.Label ?? item.Edge.BranchType.ToString()}")]
                 })
                 .ToArray();
 
@@ -195,6 +223,31 @@ public static class UiPathFlowchartConversionPlanner
             DisplayName = node.DisplayName,
             SourceNodeId = node.Id
         };
+    }
+
+    private static UiPathFlowNode? ResolvePreviewTarget(
+        string targetNodeId,
+        IReadOnlyDictionary<string, UiPathFlowNode> byId,
+        IReadOnlyDictionary<string, UiPathFlowEdge[]> bySource,
+        IReadOnlyDictionary<string, int> incomingCount)
+    {
+        var current = targetNodeId;
+        var seen = new HashSet<string>(Comparer);
+        while (seen.Add(current) && byId.TryGetValue(current, out var node))
+        {
+            if (!UiPathFlowchartConversionPolicy.IsCommentedCodeBlock(node))
+            {
+                return node;
+            }
+
+            current = NextContinuation(node, bySource, incomingCount) ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(current))
+            {
+                return null;
+            }
+        }
+
+        return null;
     }
 
     private static string? NextContinuation(UiPathFlowNode node, IReadOnlyDictionary<string, UiPathFlowEdge[]> bySource, IReadOnlyDictionary<string, int> incomingCount)

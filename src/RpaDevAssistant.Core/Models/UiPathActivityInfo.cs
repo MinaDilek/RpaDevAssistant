@@ -24,5 +24,7 @@ public sealed record UiPathActivityInfo
 
     public IReadOnlyDictionary<string, string?> Arguments { get; init; } = new Dictionary<string, string?>();
 
+    public IReadOnlyDictionary<string, string?> ArgumentMappingDirections { get; init; } = new Dictionary<string, string?>();
+
     public IReadOnlyDictionary<string, string?> Properties { get; init; } = new Dictionary<string, string?>();
 }

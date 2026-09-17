@@ -6,6 +6,8 @@ public sealed record UiPathAnalysisThresholds
 
     public int LongDelaySeconds { get; init; } = 5;
 
+    public int FixedDelayWithoutStateWaitThreshold { get; init; } = 2;
+
     public int ExcessiveTimeoutMs { get; init; } = 120_000;
 
     public int LowTimeoutMs { get; init; } = 1_000;
