@@ -28,6 +28,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "icon": ["icons/icon.png", "icons/icon.ico"],
     "externalBin": ["bin/RpaDevAssistant.Api"],
     "windows": {
       "nsis": {
