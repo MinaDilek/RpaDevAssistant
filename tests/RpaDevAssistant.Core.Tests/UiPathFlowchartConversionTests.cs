@@ -845,34 +845,27 @@ public sealed class UiPathFlowchartConversionTests
     }
 
     [Fact]
-    public async Task Standalone_ServicesSorgu_ParsesHttpClientCorrectly()
+    public async Task Standalone_ServiceFlow_ParsesHttpClientCorrectly()
     {
-        var path = "/Users/mina/Desktop/W_Personel_Kredisi_IK_Onay/Services_Sorgu.xaml";
-        Assert.True(File.Exists(path));
+        using var fixture = new FlowchartProjectFixture();
+        var path = Path.Combine(fixture.RootPath, "Services_Sorgu.xaml");
+        var outputPath = Path.Combine(fixture.RootPath, "Services_Sorgu_Sequence.xaml");
+        fixture.WriteWorkflow("Services_Sorgu.xaml", ServiceFlowchartWithHttpClient());
 
         var result = await StandaloneConverter().AnalyzeAsync(path);
         Assert.True(result.CanConvert);
-        if (result.CustomActivityDetections.Count > 0)
-        {
-            Assert.Contains(result.CustomActivityDetections, d =>
-                d.ActivityName.Contains("HttpClient")
-                && d.SuggestedPackage == "UiPath.WebAPI.Activities");
-        }
-        var projectOut = "/Users/mina/Desktop/W_Personel_Kredisi_IK_Onay/Services_Sorgu_Sequence.xaml";
-        var desktopOut = "/Users/mina/Desktop/Services_Sorgu_Sequence.xaml";
 
         var convertResult = await StandaloneConverter().ConvertAsync(new UiPathStandaloneFlowchartConvertRequest
         {
             XamlFilePath = path,
-            OutputPath = projectOut,
+            OutputPath = outputPath,
+            ExpectedWorkflowHash = result.WorkflowHash,
             Confirmed = true,
             ReplaceCustomActivitiesWithUiPathStandard = true
         });
 
         Assert.True(convertResult.Success);
-        File.Copy(projectOut, desktopOut, overwrite: true);
-
-        var convertedXaml = File.ReadAllText(projectOut);
+        var convertedXaml = File.ReadAllText(outputPath);
         Assert.Contains("ui:HttpClient", convertedXaml);
         Assert.Contains("HTTP Request Get", convertedXaml);
         Assert.Contains("EndPoint=", convertedXaml);
@@ -888,6 +881,45 @@ public sealed class UiPathFlowchartConversionTests
 
 
 
+
+    private static string ServiceFlowchartWithHttpClient() => """
+        <Activity mc:Ignorable="sap sap2010" x:Class="Services_Sorgu"
+                  xmlns="http://schemas.microsoft.com/netfx/2009/xaml/activities"
+                  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                  xmlns:sap="http://schemas.microsoft.com/netfx/2009/xaml/activities/presentation"
+                  xmlns:sap2010="http://schemas.microsoft.com/netfx/2010/xaml/activities/presentation"
+                  xmlns:scg="clr-namespace:System.Collections.Generic;assembly=System.Private.CoreLib"
+                  xmlns:ui="http://schemas.uipath.com/workflow/activities"
+                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+          <Sequence DisplayName="Root Sequence">
+            <Flowchart DisplayName="Services Flowchart">
+              <Flowchart.Variables>
+                <Variable x:TypeArguments="x:Int32" Name="retry_count" />
+                <Variable x:TypeArguments="x:String" Name="result_sorgu" />
+              </Flowchart.Variables>
+              <Flowchart.StartNode><x:Reference>A</x:Reference></Flowchart.StartNode>
+              <FlowStep x:Name="A">
+                <ui:HttpClient DisplayName="HTTP Request Get" EndPoint="https://api.example.com/items" Method="GET">
+                  <ui:HttpClient.Attachments>
+                    <scg:Dictionary x:TypeArguments="x:String, InArgument(x:String)" />
+                  </ui:HttpClient.Attachments>
+                </ui:HttpClient>
+                <FlowStep.Next><x:Reference>B</x:Reference></FlowStep.Next>
+              </FlowStep>
+              <FlowStep x:Name="B">
+                <Sequence DisplayName="Process response">
+                  <ui:DeserializeJson DisplayName="Deserialize JSON" JsonString="[result_sorgu]" />
+                  <ui:CommentOut sap2010:WorkflowViewState.IdRef="CommentOut_1">
+                    <ui:CommentOut.Body>
+                      <Sequence DisplayName="Disabled"><Assign DisplayName="Ignored" /></Sequence>
+                    </ui:CommentOut.Body>
+                  </ui:CommentOut>
+                </Sequence>
+              </FlowStep>
+            </Flowchart>
+          </Sequence>
+        </Activity>
+        """;
 
     private static string FlowchartWithCustomActivities() => Flowchart("""
         <FlowStep x:Name="A">
