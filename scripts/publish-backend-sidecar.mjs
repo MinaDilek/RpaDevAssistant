@@ -6,9 +6,11 @@ import { spawnSync } from 'node:child_process';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..');
 const runtime = process.argv[2] ?? 'win-x64';
-const dotnet = process.env.DOTNET ?? join(repoRoot, '.dotnet', 'dotnet');
+const localDotnet = join(repoRoot, '.dotnet', process.platform === 'win32' ? 'dotnet.exe' : 'dotnet');
+const dotnet = process.env.DOTNET ?? (existsSync(localDotnet) ? localDotnet : 'dotnet');
 const publishDir = join(repoRoot, 'artifacts', 'backend', runtime);
 const sidecarDir = join(repoRoot, 'frontend', 'src-tauri', 'bin');
+const tempDir = join(repoRoot, 'tmp');
 
 const targetTriples = {
   'win-x64': 'x86_64-pc-windows-msvc',
@@ -25,6 +27,7 @@ if (!triple) {
 rmSync(publishDir, { recursive: true, force: true });
 mkdirSync(publishDir, { recursive: true });
 mkdirSync(sidecarDir, { recursive: true });
+mkdirSync(tempDir, { recursive: true });
 
 const publish = spawnSync(dotnet, [
   'publish',
@@ -35,7 +38,6 @@ const publish = spawnSync(dotnet, [
   runtime,
   '--self-contained',
   'true',
-  '--no-restore',
   '-p:PublishSingleFile=true',
   '-p:PublishTrimmed=false',
   '-p:UseSharedCompilation=false',
@@ -49,10 +51,14 @@ const publish = spawnSync(dotnet, [
   stdio: 'inherit',
   env: {
     ...process.env,
-    TMPDIR: join(repoRoot, 'tmp'),
-    GIT_CONFIG_GLOBAL: '/dev/null',
+    TMPDIR: tempDir,
+    GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null',
   },
 });
+
+if (publish.error) {
+  throw new Error(`Unable to start '${dotnet} publish': ${publish.error.message}`, { cause: publish.error });
+}
 
 if (publish.status !== 0) {
   process.exit(publish.status ?? 1);
