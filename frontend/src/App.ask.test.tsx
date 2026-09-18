@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { App } from './main';
@@ -47,10 +47,10 @@ describe('App Ask Project UI', () => {
   });
 
   it('keeps Ask disabled until a question exists and shows loading', async () => {
-    askProject.mockImplementation(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 20));
-      return directAnswer();
-    });
+    let resolveRequest!: (value: ReturnType<typeof directAnswer>) => void;
+    askProject.mockImplementation(() => new Promise((resolve) => {
+      resolveRequest = resolve;
+    }));
     render(<App />);
     await analyze();
     await userEvent.click(screen.getByRole('button', { name: /ask project/i }));
@@ -60,6 +60,7 @@ describe('App Ask Project UI', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Ask' }));
 
     expect(screen.getByText('Asking...')).toBeInTheDocument();
+    await act(async () => resolveRequest(directAnswer()));
   });
 
   it('renders direct local answers', async () => {

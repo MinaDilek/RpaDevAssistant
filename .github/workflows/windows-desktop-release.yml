@@ -42,10 +42,11 @@ jobs:
           dotnet build RpaDevAssistant.sln --configuration Release --no-restore
           dotnet test RpaDevAssistant.sln --configuration Release --no-build
 
-      - name: Validate frontend
-        run: |
-          npm run frontend:test
-          npm run frontend:build
+      - name: Test frontend
+        run: npm run frontend:test
+
+      - name: Build frontend
+        run: npm run frontend:build
 
       - name: Publish backend sidecar
         run: npm run backend:publish:win

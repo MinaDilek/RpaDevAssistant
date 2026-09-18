@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { App } from './main';
@@ -329,16 +329,17 @@ describe('App Fix Suggestion UI', () => {
   });
 
   it('shows loading state', async () => {
-    getFixSuggestion.mockImplementation(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 20));
-      return fixResponse();
-    });
+    let resolveRequest!: (value: ReturnType<typeof fixResponse>) => void;
+    getFixSuggestion.mockImplementation(() => new Promise((resolve) => {
+      resolveRequest = resolve;
+    }));
     render(<App />);
     await analyze();
     await userEvent.click(screen.getByRole('button', { name: 'Findings' }));
     await userEvent.click(screen.getByRole('button', { name: /fix suggestion/i }));
 
     expect(screen.getByText('Generating...')).toBeInTheDocument();
+    await act(async () => resolveRequest(fixResponse()));
   });
 
   it('renders deterministic fix preview', async () => {
