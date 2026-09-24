@@ -566,8 +566,7 @@ describe('App Fix Suggestion UI', () => {
     await openFix();
 
     const input = screen.getByLabelText('New Workflow Path');
-    await userEvent.clear(input);
-    await userEvent.type(input, 'Business/ProcessInvoice.xaml');
+    fireEvent.change(input, { target: { value: 'Business/ProcessInvoice.xaml' } });
     await userEvent.click(screen.getByRole('button', { name: 'Rename Workflow' }));
     expect(screen.getByRole('dialog', { name: /rename this workflow/i })).toBeInTheDocument();
     expect(renameWorkflow).not.toHaveBeenCalled();
