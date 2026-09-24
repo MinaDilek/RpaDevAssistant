@@ -12,9 +12,13 @@
     "backend:build": "./.dotnet/dotnet build --no-restore",
     "backend:test": "./.dotnet/dotnet test --no-build",
     "backend:publish:win": "node scripts/publish-backend-sidecar.mjs win-x64",
+    "backend:publish:linux": "node scripts/publish-backend-sidecar.mjs linux-x64",
     "frontend:build": "npm run build --workspace frontend",
     "frontend:test": "npm run test --workspace frontend",
     "desktop:dev": "npm run tauri:dev --workspace frontend",
-    "desktop:build": "npm run frontend:build && npm run backend:publish:win && npm run tauri:build --workspace frontend"
+    "desktop:build": "npm run frontend:build && npm run backend:publish:win && npm run tauri:build --workspace frontend",
+    "desktop:build:linux": "npm run frontend:build && npm run backend:publish:linux && npm run tauri:build:linux --workspace frontend",
+    "quality-gate": "node scripts/quality-gate.mjs",
+    "quality-gate:test": "node --test scripts/quality-gate.test.mjs"
   }
 }

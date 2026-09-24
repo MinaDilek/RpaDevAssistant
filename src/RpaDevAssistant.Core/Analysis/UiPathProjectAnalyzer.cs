@@ -3,6 +3,7 @@ using RpaDevAssistant.Core.Analysis.Scoring;
 using RpaDevAssistant.Core.Analysis.CustomRules;
 using RpaDevAssistant.Core.Models;
 using RpaDevAssistant.Core.Scanning;
+using System.Diagnostics;
 
 namespace RpaDevAssistant.Core.Analysis;
 
@@ -36,23 +37,58 @@ public sealed class UiPathProjectAnalyzer : IUiPathProjectAnalyzer
 
     public UiPathProjectAnalysisResult Analyze(string projectPath, string? profileId = null)
     {
+        var totalStopwatch = Stopwatch.StartNew();
         var profile = profileProvider.GetProfile(profileId);
         var projectScan = scanner.Scan(projectPath);
+        return AnalyzeScan(projectScan, profile, totalStopwatch);
+    }
+
+    public async Task<UiPathProjectAnalysisResult> AnalyzeAsync(
+        string projectPath,
+        string? profileId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var totalStopwatch = Stopwatch.StartNew();
+        var profile = profileProvider.GetProfile(profileId);
+        var projectScan = await scanner.ScanAsync(projectPath, cancellationToken).ConfigureAwait(false);
+        return AnalyzeScan(projectScan, profile, totalStopwatch);
+    }
+
+    private UiPathProjectAnalysisResult AnalyzeScan(
+        ProjectScanResult projectScan,
+        UiPathRuleProfile profile,
+        Stopwatch totalStopwatch)
+    {
         var context = new UiPathAnalysisContext
         {
             Project = projectScan
         };
+        var ruleStopwatch = Stopwatch.StartNew();
         var analysis = ruleEngine.Analyze(context, profile);
         AddCustomRuleFindings(context, analysis, profile);
         UpdateWorkflowComplexity(projectScan, analysis);
+        ruleStopwatch.Stop();
+
+        var scoringStopwatch = Stopwatch.StartNew();
         var qualityScore = scoringEngine.Calculate(projectScan, analysis, profile);
+        scoringStopwatch.Stop();
+        totalStopwatch.Stop();
 
         return new UiPathProjectAnalysisResult
         {
             ProjectScan = projectScan,
             Analysis = analysis,
             QualityScore = qualityScore,
-            Profile = profile
+            Profile = profile,
+            Performance = new UiPathAnalysisPerformanceMetrics
+            {
+                TotalElapsedMilliseconds = totalStopwatch.Elapsed.TotalMilliseconds,
+                ScanElapsedMilliseconds = projectScan.Performance.TotalElapsedMilliseconds,
+                WorkflowDiscoveryElapsedMilliseconds = projectScan.Performance.WorkflowDiscoveryElapsedMilliseconds,
+                XamlParsingElapsedMilliseconds = projectScan.Performance.XamlParsingElapsedMilliseconds,
+                RuleAnalysisElapsedMilliseconds = ruleStopwatch.Elapsed.TotalMilliseconds,
+                ScoringElapsedMilliseconds = scoringStopwatch.Elapsed.TotalMilliseconds
+            }
         };
     }
 
@@ -63,8 +99,8 @@ public sealed class UiPathProjectAnalyzer : IUiPathProjectAnalyzer
             return;
         }
 
-        var customRules = customRuleRepository.GetRules();
-        if (customRules.Count == 0)
+        var customRules = customRuleRepository.GetRules().Where(rule => !rule.IsTemplate).ToArray();
+        if (customRules.Length == 0)
         {
             return;
         }

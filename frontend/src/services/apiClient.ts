@@ -164,6 +164,32 @@ export async function askProject(input: {
   return result;
 }
 
+export async function analyzeProcessPdd(input: {
+  projectPath: string;
+  pddPath?: string;
+  pddFileName?: string;
+  pddContent?: string;
+}): Promise<unknown> {
+  const baseUrl = await getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/api/uipath/projects/process-pdd-analysis`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(withLocale(input)),
+  });
+
+  const result = await response.json();
+  if (!response.ok) {
+    const message = typeof result?.error === 'string'
+      ? result.error
+      : `Process and PDD analysis failed with HTTP ${response.status}.`;
+    throw new Error(message);
+  }
+
+  return result;
+}
+
 export async function getFixSuggestion(input: {
   projectPath: string;
   profileId?: string;
@@ -227,6 +253,52 @@ export async function applyFix(input: {
   return result;
 }
 
+export async function applyAllFixes(input: {
+  projectPath: string;
+  profileId?: string;
+  maxFixes?: number;
+  createBackup?: boolean;
+}): Promise<unknown> {
+  const baseUrl = await getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/api/uipath/projects/fixes/apply-all`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(withLocale(input)),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(typeof result?.message === 'string'
+      ? result.message
+      : typeof result?.error === 'string'
+        ? result.error
+        : `Apply all fixes request failed with HTTP ${response.status}.`);
+  }
+  return result;
+}
+
+export async function renameWorkflow(input: {
+  projectPath: string;
+  workflowPath: string;
+  newWorkflowPath: string;
+  expectedFileHash?: string | null;
+}): Promise<unknown> {
+  const baseUrl = await getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/api/uipath/projects/fixes/rename-workflow`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(typeof result?.message === 'string'
+      ? result.message
+      : typeof result?.error === 'string'
+        ? result.error
+        : `Workflow rename request failed with HTTP ${response.status}.`);
+  }
+  return result;
+}
+
 export async function listBackups(projectPath: string): Promise<unknown> {
   const baseUrl = await getBackendBaseUrl();
   const response = await fetch(`${baseUrl}/api/uipath/projects/backups?projectPath=${encodeURIComponent(projectPath)}`);
@@ -281,6 +353,64 @@ export async function compareAnalysisSnapshots(input: {
   return result;
 }
 
+export async function compareGitRefs(input: {
+  projectPath: string;
+  baselineRef: string;
+  targetRef: string;
+  profileId?: string;
+}): Promise<unknown> {
+  const baseUrl = await getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/api/uipath/git/compare`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    const message = typeof result?.message === 'string'
+      ? result.message
+      : typeof result?.error === 'string'
+        ? result.error
+        : `Git comparison request failed with HTTP ${response.status}.`;
+    throw new Error(message);
+  }
+
+  return result;
+}
+
+export async function getOrchestratorSummary(): Promise<unknown> {
+  const baseUrl = await getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/api/uipath/orchestrator/summary`);
+  const result = await response.json();
+  if (!response.ok) {
+    const message = typeof result?.message === 'string' ? result.message : `Orchestrator request failed with HTTP ${response.status}.`;
+    throw new Error(message);
+  }
+  return result;
+}
+
+export async function reviewPullRequest(input: { projectPath: string; provider: string; repository: string; pullRequestId: number; profileId?: string }): Promise<unknown> {
+  const baseUrl = await getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/api/uipath/source-control/pull-requests/review`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result?.message ?? `Pull request review failed with HTTP ${response.status}.`);
+  return result;
+}
+
+export async function postPullRequestComment(input: { provider: string; repository: string; pullRequestId: number; body: string }): Promise<unknown> {
+  const baseUrl = await getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/api/uipath/source-control/pull-requests/comment`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result?.message ?? `Pull request comment failed with HTTP ${response.status}.`);
+  return result;
+}
+
 export async function undoFix(input: {
   projectPath: string;
   backupId: string;
@@ -308,6 +438,55 @@ export async function undoFix(input: {
   }
 
   return result;
+}
+
+export async function analyzeConfig(projectPath: string, configPath?: string | null): Promise<unknown> {
+  return postJsonRequest('/api/uipath/projects/config/analyze', { projectPath, configPath }, 'Config analysis failed');
+}
+
+async function postJsonRequest(path: string, body: unknown, fallbackMessage: string): Promise<unknown> {
+  const baseUrl = await getBackendBaseUrl();
+  const response = await postJson(baseUrl, path, body);
+  if (response.ok) {
+    return response.json();
+  }
+
+  const result = await response.json().catch(() => ({}));
+  const message = typeof result?.message === 'string'
+    ? result.message
+    : typeof result?.error === 'string'
+      ? result.error
+      : `${fallbackMessage} with HTTP ${response.status}.`;
+  throw new Error(message);
+}
+
+function postJson(baseUrl: string, path: string, body: unknown): Promise<Response> {
+  return fetch(`${baseUrl}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function previewConfigChanges(input: {
+  projectPath: string;
+  configPath?: string | null;
+  removeKeys?: string[];
+  additions?: Array<{ key: string; value: string; description?: string | null; source?: string | null }>;
+}): Promise<unknown> {
+  return postJsonRequest('/api/uipath/projects/config/preview', input, 'Config preview failed');
+}
+
+export async function generateConfigWorkbook(input: {
+  projectPath: string;
+  configPath?: string | null;
+  outputPath: string;
+  removeKeys?: string[];
+  additions?: Array<{ key: string; value: string; description?: string | null; source?: string | null }>;
+}): Promise<unknown> {
+  return postJsonRequest('/api/uipath/projects/config/generate', input, 'Config generation failed');
 }
 
 export async function analyzeFlowchartConversion(input: {
@@ -342,6 +521,7 @@ export async function applyFlowchartConversion(input: {
   expectedWorkflowHash?: string | null;
   confirmed: boolean;
   createBackup?: boolean;
+  replaceCustomActivitiesWithUiPathStandard?: boolean;
 }): Promise<unknown> {
   const baseUrl = await getBackendBaseUrl();
   const response = await fetch(`${baseUrl}/api/uipath/workflows/flowchart-conversion/apply`, {
@@ -424,6 +604,7 @@ export async function convertStandaloneFlowchart(input: {
   outputPath: string;
   expectedWorkflowHash?: string | null;
   confirmed: boolean;
+  replaceCustomActivitiesWithUiPathStandard?: boolean;
 }): Promise<unknown> {
   const baseUrl = await getBackendBaseUrl();
   const response = await fetch(`${baseUrl}/api/uipath/workflows/flowchart-conversion/standalone/convert`, {
@@ -585,6 +766,29 @@ export async function importCustomRules(rules: unknown[], overwrite = false): Pr
     throw new Error(message);
   }
 
+  return result;
+}
+
+export async function exportRuleModule(input: { moduleId: string; name: string; version: string; publisher?: string }): Promise<unknown> {
+  const baseUrl = await getBackendBaseUrl();
+  const query = new URLSearchParams({ moduleId: input.moduleId, name: input.name, version: input.version });
+  if (input.publisher) query.set('publisher', input.publisher);
+  const response = await fetch(`${baseUrl}/api/uipath/rule-modules/export?${query}`);
+  const result = await response.json();
+  if (!response.ok) throw new Error(result?.error ?? `Export rule module failed with HTTP ${response.status}.`);
+  return result;
+}
+
+export async function importRuleModule(module: unknown, overwrite = false): Promise<unknown> {
+  const baseUrl = await getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/api/uipath/rule-modules/import`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ module, overwrite }),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    const message = Array.isArray(result?.errors) ? result.errors.join(' ') : `Import rule module failed with HTTP ${response.status}.`;
+    throw new Error(message);
+  }
   return result;
 }
 

@@ -13,4 +13,6 @@ public sealed record UiPathRuleConfiguration
     public double MaxPenalty { get; init; }
 
     public string? Description { get; init; }
+
+    public UiPathNamingConventionConfiguration? NamingConvention { get; init; }
 }

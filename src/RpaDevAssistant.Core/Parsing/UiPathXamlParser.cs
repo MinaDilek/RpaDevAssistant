@@ -35,9 +35,11 @@ public sealed class UiPathXamlParser : IUiPathXamlParser
     {
         "ActivityAction",
         "DelegateInArgument",
+        "Dictionary",
         "InArgument",
         "InOutArgument",
         "OutArgument",
+        "Variable",
         "Target"
     };
 
@@ -79,6 +81,7 @@ public sealed class UiPathXamlParser : IUiPathXamlParser
             }
 
             ReadArguments(document, analysis);
+            ReadVariables(document, analysis);
 
             if (IsWorkflowRootWrapper(document.Root))
             {
@@ -126,19 +129,110 @@ public sealed class UiPathXamlParser : IUiPathXamlParser
             }
 
             var type = ReadAttributeValue(property, "Type");
+            var defaultValue = ReadArgumentDefaultValue(document, property, name);
             analysis.Arguments.Add(new UiPathArgumentInfo
             {
                 Name = name,
                 Type = type,
-                Direction = DetectArgumentDirection(name, type)
+                Direction = DetectArgumentDirection(name, type),
+                DefaultValue = defaultValue.Value,
+                HasDefaultValue = defaultValue.HasValue
             });
         }
+    }
+
+    private static (bool HasValue, string? Value) ReadArgumentDefaultValue(
+        XDocument document,
+        XElement property,
+        string argumentName)
+    {
+        var defaultAttribute = property.Attributes().FirstOrDefault(attribute =>
+            attribute.Name.LocalName.Equals("Default", StringComparison.OrdinalIgnoreCase));
+        if (defaultAttribute is not null)
+        {
+            return (true, defaultAttribute.Value);
+        }
+
+        var defaultElement = property.Elements().FirstOrDefault(element =>
+            element.Name.LocalName.EndsWith(".Default", StringComparison.OrdinalIgnoreCase));
+        if (defaultElement is not null)
+        {
+            return (true, ReadSerializedExpression(defaultElement));
+        }
+
+        var rootBinding = document.Root?.Elements().FirstOrDefault(element =>
+            element.Name.LocalName.EndsWith($".{argumentName}", StringComparison.OrdinalIgnoreCase));
+        if (rootBinding is null)
+        {
+            return (false, null);
+        }
+
+        var argument = rootBinding.DescendantsAndSelf().FirstOrDefault(element =>
+            element.Name.LocalName.Equals("InArgument", StringComparison.OrdinalIgnoreCase)
+            || element.Name.LocalName.Equals("InOutArgument", StringComparison.OrdinalIgnoreCase));
+        if (argument is null || (!argument.HasElements && string.IsNullOrWhiteSpace(argument.Value)))
+        {
+            return (false, null);
+        }
+
+        return (true, ReadSerializedExpression(argument));
+    }
+
+    private static string? ReadSerializedExpression(XElement element)
+    {
+        var expressionAttribute = element.DescendantsAndSelf()
+            .SelectMany(candidate => candidate.Attributes())
+            .FirstOrDefault(attribute =>
+                attribute.Name.LocalName.Equals("ExpressionText", StringComparison.OrdinalIgnoreCase)
+                || attribute.Name.LocalName.Equals("Value", StringComparison.OrdinalIgnoreCase));
+        if (expressionAttribute is not null)
+        {
+            return expressionAttribute.Value;
+        }
+
+        if (element.DescendantsAndSelf().Any(candidate =>
+                candidate.Name.LocalName.Equals("Null", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "{x:Null}";
+        }
+
+        var value = element.Value.Trim();
+        return value.Length == 0 ? null : value;
     }
 
     private static bool IsArgumentPropertyElement(XElement element)
     {
         return element.Name.LocalName.Equals("Property", StringComparison.OrdinalIgnoreCase)
             && element.Parent?.Name.LocalName.Equals("Members", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    private static void ReadVariables(XDocument document, UiPathWorkflowAnalysis analysis)
+    {
+        foreach (var element in document.Descendants().Where(candidate =>
+                     candidate.Name.LocalName.Equals("Variable", StringComparison.OrdinalIgnoreCase)))
+        {
+            var name = ReadAttributeValue(element, "Name");
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            var defaultWrapper = element.Elements().FirstOrDefault(child =>
+                child.Name.LocalName.EndsWith(".Default", StringComparison.OrdinalIgnoreCase));
+            var scopeElement = element.Parent?.Parent;
+            analysis.Variables.Add(new UiPathVariableInfo
+            {
+                Name = name,
+                Type = ReadAttributeValue(element, "TypeArguments") ?? ReadAttributeValue(element, "Type"),
+                DefaultValue = ReadAttributeValue(element, "Default") ?? defaultWrapper?.Value.Trim(),
+                Scope = scopeElement is null
+                    ? null
+                    : ReadAttributeValue(scopeElement, "DisplayName") ?? scopeElement.Name.LocalName,
+                ScopeActivityId = scopeElement is null
+                    ? null
+                    : ReadAttributeValue(scopeElement, "WorkflowViewState.IdRef") ?? ReadAttributeValue(scopeElement, "IdRef")
+            });
+        }
     }
 
     private static bool IsWorkflowRootWrapper(XElement element)
@@ -203,6 +297,7 @@ public sealed class UiPathXamlParser : IUiPathXamlParser
             var stableId = ReadAttributeValue(element, "WorkflowViewState.IdRef") ?? ReadAttributeValue(element, "IdRef");
             var activityId = string.IsNullOrWhiteSpace(stableId) ? activityPath : stableId;
             var name = NormalizeActivityName(element.Name.LocalName);
+            var argumentMappings = ReadActivityArguments(element);
             analysis.Activities.Add(new UiPathActivityInfo
             {
                 ActivityId = activityId,
@@ -215,7 +310,9 @@ public sealed class UiPathXamlParser : IUiPathXamlParser
                 Namespace = string.IsNullOrWhiteSpace(element.Name.NamespaceName) ? null : element.Name.NamespaceName,
                 Depth = depth,
                 XamlFile = analysis.RelativePath,
-                Properties = ReadProperties(element)
+                Properties = ReadProperties(element),
+                Arguments = argumentMappings.Values,
+                ArgumentMappingDirections = argumentMappings.Directions
             });
 
             var childIndex = 0;
@@ -287,8 +384,20 @@ public sealed class UiPathXamlParser : IUiPathXamlParser
 
         foreach (var wrapper in element.Elements().Where(IsPropertyWrapperElement))
         {
+            var wrapperPropertyName = NormalizePropertyName(wrapper.Name.LocalName);
+            var wrapperValue = ReadPropertyWrapperValue(wrapper);
+            if (!string.IsNullOrWhiteSpace(wrapperValue))
+            {
+                properties.TryAdd(wrapperPropertyName, wrapperValue);
+            }
+
             foreach (var nestedElement in wrapper.Elements())
             {
+                if (nestedElement.Name.LocalName.Equals("Variable", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 foreach (var attribute in nestedElement.Attributes())
                 {
                     if (attribute.IsNamespaceDeclaration || ShouldIgnoreAttribute(attribute))
@@ -304,6 +413,55 @@ public sealed class UiPathXamlParser : IUiPathXamlParser
         return properties;
     }
 
+    private static ActivityArgumentMappings ReadActivityArguments(XElement element)
+    {
+        var arguments = new Dictionary<string, string?>(KeyComparer);
+        var directions = new Dictionary<string, string?>(KeyComparer);
+        if (!NormalizeActivityName(element.Name.LocalName).Equals("InvokeWorkflowFile", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ActivityArgumentMappings(arguments, directions);
+        }
+
+        foreach (var wrapper in element.Elements().Where(child =>
+                     child.Name.LocalName.EndsWith(".Arguments", StringComparison.OrdinalIgnoreCase)))
+        {
+            foreach (var mapping in wrapper.Descendants())
+            {
+                var key = mapping.Attributes().FirstOrDefault(attribute =>
+                    attribute.Name.LocalName.Equals("Key", StringComparison.OrdinalIgnoreCase))?.Value;
+                if (string.IsNullOrWhiteSpace(key))
+                {
+                    continue;
+                }
+
+                var value = mapping.Value.Trim();
+                arguments[key] = string.IsNullOrWhiteSpace(value) ? null : value;
+                directions[key] = NormalizeArgumentDirection(mapping.Name.LocalName);
+            }
+        }
+
+        return new ActivityArgumentMappings(arguments, directions);
+    }
+
+    private static string? NormalizeArgumentDirection(string localName) => localName switch
+    {
+        "InArgument" => "In",
+        "OutArgument" => "Out",
+        "InOutArgument" => "InOut",
+        _ => null
+    };
+
+    private sealed record ActivityArgumentMappings(
+        IReadOnlyDictionary<string, string?> Values,
+        IReadOnlyDictionary<string, string?> Directions);
+
+    private static string? ReadPropertyWrapperValue(XElement wrapper)
+    {
+        var valueElement = wrapper.Elements().FirstOrDefault(element => !element.HasElements);
+        var value = valueElement?.Value ?? (!wrapper.HasElements ? wrapper.Value : null);
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
     private static bool IsPropertyWrapperElement(XElement element)
     {
         return element.Name.LocalName.Contains('.', StringComparison.Ordinal);
@@ -311,6 +469,11 @@ public sealed class UiPathXamlParser : IUiPathXamlParser
 
     private static bool ShouldIgnoreAttribute(XAttribute attribute)
     {
+        if (attribute.Name.LocalName.Equals("TypeArguments", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
         return IgnoredAttributeNames.Contains(attribute.Name.LocalName)
             || IsIgnoredNamespace(attribute.Name.NamespaceName);
     }

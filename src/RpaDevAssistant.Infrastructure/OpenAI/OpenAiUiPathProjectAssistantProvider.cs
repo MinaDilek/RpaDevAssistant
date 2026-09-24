@@ -32,9 +32,11 @@ public sealed class OpenAiUiPathProjectAssistantProvider : IUiPathProjectAssista
         this.logger = logger;
     }
 
-    public string ProviderName => "OpenAI";
+    public string ProviderName => options.TryResolveProvider(out var configuration)
+        ? configuration.ProviderName
+        : options.Provider.ToString();
 
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(options.ApiKey);
+    public bool IsConfigured => options.TryResolveProvider(out _);
 
     public async Task<UiPathProjectAnswer> AnswerAsync(UiPathProjectAssistantPrompt prompt, CancellationToken cancellationToken)
     {
@@ -48,8 +50,16 @@ public sealed class OpenAiUiPathProjectAssistantProvider : IUiPathProjectAssista
 
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/responses");
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
+            if (!options.TryResolveProvider(out var configuration))
+            {
+                return NotConfigured(prompt.Locale);
+            }
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, configuration.Endpoint);
+            if (configuration.ApiKey is not null)
+            {
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", configuration.ApiKey);
+            }
             request.Content = new StringContent(JsonSerializer.Serialize(BuildRequestBody(prompt), JsonOptions), Encoding.UTF8, "application/json");
 
             using var response = await httpClient.SendAsync(request, timeout.Token).ConfigureAwait(false);
@@ -107,7 +117,7 @@ public sealed class OpenAiUiPathProjectAssistantProvider : IUiPathProjectAssista
     {
         return new
         {
-            model = options.Model,
+            model = options.EffectiveModel,
             instructions = prompt.SystemInstructions,
             input = prompt.UserContext,
             max_output_tokens = options.MaxOutputTokens,
@@ -124,7 +134,7 @@ public sealed class OpenAiUiPathProjectAssistantProvider : IUiPathProjectAssista
 
     private static UiPathProjectAnswer NotConfigured(string? locale)
     {
-        return Failed(Localized(locale, "AI Review is not configured. Set OPENAI_API_KEY to enable interpretation questions.", "AI İnceleme yapılandırılmamış. Yorum sorularını etkinleştirmek için OPENAI_API_KEY ayarlayın."));
+        return Failed(Localized(locale, "AI Review is not configured. Configure the selected AI provider to enable interpretation questions.", "AI İnceleme yapılandırılmamış. Yorum sorularını etkinleştirmek için seçili AI provider'ı yapılandırın."));
     }
 
     private static UiPathProjectAnswer Failed(string message)

@@ -72,8 +72,14 @@ public sealed class UiPathAiReviewService : IUiPathAiReviewService
             var prompt = promptBuilder.Build(request);
             var result = await provider.ReviewAsync(prompt, cancellationToken).ConfigureAwait(false);
 
+            if (!UiPathAiReviewResponseMapper.TryMap(result, request, out var mappedResult))
+            {
+                logger.LogWarning("AI review returned an invalid structured response. Scope={Scope}, Provider={Provider}", scope, provider.ProviderName);
+                return UiPathAiReviewResult.Failure(scope, localizer.Get("Ai.Failure.Generic", locale), workflowPath, locale);
+            }
+
             logger.LogInformation("AI review completed. Scope={Scope}, Provider={Provider}, DurationMs={DurationMs}", scope, provider.ProviderName, stopwatch.ElapsedMilliseconds);
-            return result with
+            return mappedResult with
             {
                 ReviewedScope = scope,
                 ReviewedWorkflowPath = workflowPath,

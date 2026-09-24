@@ -102,6 +102,40 @@ public sealed class UiPathAnalysisHistoryServiceTests
     }
 
     [Fact]
+    public void Compare_FallsBackToSnapshotIdsWhenProjectPathLookupMisses()
+    {
+        using var directory = new TempHistoryDirectory();
+        var service = directory.CreateService();
+
+        var baseline = service.SaveSnapshot(Analysis(directory.ProjectPath, [Finding("RPA001", "Main.xaml")], score: 80));
+        var target = service.SaveSnapshot(Analysis(directory.ProjectPath, [Finding("RPA002", "Main.xaml")], score: 85));
+
+        var comparison = service.Compare(Path.Combine(directory.RootPath, "renamed-project"), baseline.Snapshot.SnapshotId, target.Snapshot.SnapshotId);
+
+        Assert.NotNull(comparison);
+        Assert.Equal(5, comparison.ScoreDelta);
+        Assert.Single(comparison.NewFindings);
+        Assert.Single(comparison.ResolvedFindings);
+    }
+
+    [Fact]
+    public void Compare_DoesNotCrossCompareDifferentProjectsDuringFallback()
+    {
+        using var directory = new TempHistoryDirectory();
+        var service = directory.CreateService();
+        var secondProjectPath = Path.Combine(directory.RootPath, "second-project");
+        Directory.CreateDirectory(secondProjectPath);
+        File.WriteAllText(Path.Combine(secondProjectPath, "project.json"), "{\"name\":\"SecondProject\"}");
+
+        var baseline = service.SaveSnapshot(Analysis(directory.ProjectPath, [Finding("RPA001", "Main.xaml")], score: 80, projectName: "FirstProject"));
+        var target = service.SaveSnapshot(Analysis(secondProjectPath, [Finding("RPA002", "Main.xaml")], score: 85, projectName: "SecondProject"));
+
+        var comparison = service.Compare(Path.Combine(directory.RootPath, "missing-project"), baseline.Snapshot.SnapshotId, target.Snapshot.SnapshotId);
+
+        Assert.Null(comparison);
+    }
+
+    [Fact]
     public void FindingIdentity_DoesNotDependOnlyOnRuntimeActivityId()
     {
         using var directory = new TempHistoryDirectory();

@@ -1,9 +1,12 @@
 using System.Text.Json;
+using System.Diagnostics;
 using RpaDevAssistant.Core.Analysis;
+using RpaDevAssistant.Core.Compatibility;
 using RpaDevAssistant.Core.Dependencies;
 using RpaDevAssistant.Core.Flowcharts;
 using RpaDevAssistant.Core.Models;
 using RpaDevAssistant.Core.Parsing;
+using RpaDevAssistant.Core.ProjectAssistant;
 
 namespace RpaDevAssistant.Core.Scanning;
 
@@ -11,27 +14,20 @@ public sealed class UiPathProjectScanner : IUiPathProjectScanner
 {
     private static readonly StringComparer PathComparer = StringComparer.OrdinalIgnoreCase;
 
-    private static readonly HashSet<string> ReFrameworkWorkflowNames = new(PathComparer)
-    {
-        "Main.xaml",
-        "InitAllSettings.xaml",
-        "GetTransactionData.xaml",
-        "Process.xaml",
-        "SetTransactionStatus.xaml"
-    };
-
     private readonly IUiPathXamlParser xamlParser;
     private readonly IUiPathWorkflowMetricsCalculator metricsCalculator;
     private readonly IUiPathDependencyAnalyzer dependencyAnalyzer;
     private readonly IUiPathFlowchartAnalyzer flowchartAnalyzer;
+    private readonly IUiPathCompatibilityResolver compatibilityResolver;
+    private readonly UiPathReFrameworkAnalyzer reFrameworkAnalyzer;
 
     public UiPathProjectScanner()
-        : this(new UiPathXamlParser(), new UiPathWorkflowMetricsCalculator(), new UiPathDependencyAnalyzer(), new UiPathFlowchartAnalyzer())
+        : this(new UiPathXamlParser(), new UiPathWorkflowMetricsCalculator(), new UiPathDependencyAnalyzer(), new UiPathFlowchartAnalyzer(), new UiPathCompatibilityResolver())
     {
     }
 
     public UiPathProjectScanner(IUiPathXamlParser xamlParser)
-        : this(xamlParser, new UiPathWorkflowMetricsCalculator(), new UiPathDependencyAnalyzer(), new UiPathFlowchartAnalyzer())
+        : this(xamlParser, new UiPathWorkflowMetricsCalculator(), new UiPathDependencyAnalyzer(), new UiPathFlowchartAnalyzer(), new UiPathCompatibilityResolver())
     {
     }
 
@@ -39,17 +35,23 @@ public sealed class UiPathProjectScanner : IUiPathProjectScanner
         IUiPathXamlParser xamlParser,
         IUiPathWorkflowMetricsCalculator metricsCalculator,
         IUiPathDependencyAnalyzer? dependencyAnalyzer = null,
-        IUiPathFlowchartAnalyzer? flowchartAnalyzer = null)
+        IUiPathFlowchartAnalyzer? flowchartAnalyzer = null,
+        IUiPathCompatibilityResolver? compatibilityResolver = null,
+        UiPathReFrameworkAnalyzer? reFrameworkAnalyzer = null)
     {
         this.xamlParser = xamlParser;
         this.metricsCalculator = metricsCalculator;
         this.dependencyAnalyzer = dependencyAnalyzer ?? new UiPathDependencyAnalyzer();
         this.flowchartAnalyzer = flowchartAnalyzer ?? new UiPathFlowchartAnalyzer();
+        this.compatibilityResolver = compatibilityResolver ?? new UiPathCompatibilityResolver();
+        this.reFrameworkAnalyzer = reFrameworkAnalyzer ?? new UiPathReFrameworkAnalyzer(new UiPathWorkflowGraphBuilder());
     }
 
     public ProjectScanResult Scan(string projectPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectPath);
+
+        var totalStopwatch = Stopwatch.StartNew();
 
         var normalizedProjectPath = Path.GetFullPath(projectPath);
         var result = new ProjectScanResult
@@ -60,6 +62,11 @@ public sealed class UiPathProjectScanner : IUiPathProjectScanner
         if (!Directory.Exists(normalizedProjectPath))
         {
             result.Errors.Add("Project folder does not exist.");
+            totalStopwatch.Stop();
+            result.Performance = new UiPathScanPerformanceMetrics
+            {
+                TotalElapsedMilliseconds = totalStopwatch.Elapsed.TotalMilliseconds
+            };
             return result;
         }
 
@@ -68,15 +75,42 @@ public sealed class UiPathProjectScanner : IUiPathProjectScanner
         ScanProjectJson(normalizedProjectPath, result);
         ScanWorkflows(normalizedProjectPath, result);
         result.DependencyAnalysis = dependencyAnalyzer.Analyze(result);
+        result.CompatibilityBehavior = compatibilityResolver.Resolve(
+            result.Compatibility,
+            result.DependencyAnalysis.ModernClassicMode);
         result.FlowchartAnalysis = flowchartAnalyzer.AnalyzeProject(result);
         ScanFolders(normalizedProjectPath, result);
-        DetectReFramework(result);
+        result.ReFrameworkAssessment = reFrameworkAnalyzer.Analyze(result);
+        result.IsReFramework = result.ReFrameworkAssessment.IsDetected;
 
         if (result.ProjectJsonExists && result.ProjectJsonParsed && result.ProjectName is null)
         {
             result.Warnings.Add("Project name could not be found in project.json.");
         }
 
+        totalStopwatch.Stop();
+        result.Performance = result.Performance with
+        {
+            TotalElapsedMilliseconds = totalStopwatch.Elapsed.TotalMilliseconds
+        };
+
+        return result;
+    }
+
+    public async Task<ProjectScanResult> ScanAsync(
+        string projectPath,
+        CancellationToken cancellationToken = default)
+    {
+        var result = Scan(projectPath);
+        if (!result.ProjectJsonParsed || result.Dependencies.Count == 0)
+        {
+            return result;
+        }
+
+        result.DependencyAnalysis = await dependencyAnalyzer.AnalyzeAsync(result, cancellationToken).ConfigureAwait(false);
+        result.CompatibilityBehavior = compatibilityResolver.Resolve(
+            result.Compatibility,
+            result.DependencyAnalysis.ModernClassicMode);
         return result;
     }
 
@@ -123,9 +157,15 @@ public sealed class UiPathProjectScanner : IUiPathProjectScanner
 
     private void ScanWorkflows(string projectPath, ProjectScanResult result)
     {
-        foreach (var xamlPath in Directory.EnumerateFiles(projectPath, "*.xaml", SearchOption.AllDirectories)
+        var discoveryStopwatch = Stopwatch.StartNew();
+        var xamlPaths = Directory.EnumerateFiles(projectPath, "*.xaml", SearchOption.AllDirectories)
             .Where(path => !IsAssistantWorkspacePath(projectPath, path))
-            .OrderBy(path => path, PathComparer))
+            .OrderBy(path => path, PathComparer)
+            .ToArray();
+        discoveryStopwatch.Stop();
+
+        var parsingStopwatch = Stopwatch.StartNew();
+        foreach (var xamlPath in xamlPaths)
         {
             var relativePath = Path.GetRelativePath(projectPath, xamlPath);
             var workflowAnalysis = xamlParser.Parse(xamlPath, projectPath);
@@ -138,6 +178,13 @@ public sealed class UiPathProjectScanner : IUiPathProjectScanner
                 Analysis = workflowAnalysis
             });
         }
+        parsingStopwatch.Stop();
+
+        result.Performance = new UiPathScanPerformanceMetrics
+        {
+            WorkflowDiscoveryElapsedMilliseconds = discoveryStopwatch.Elapsed.TotalMilliseconds,
+            XamlParsingElapsedMilliseconds = parsingStopwatch.Elapsed.TotalMilliseconds
+        };
 
         if (result.Workflows.Count == 0)
         {
@@ -162,12 +209,6 @@ public sealed class UiPathProjectScanner : IUiPathProjectScanner
                 WorkflowCount = workflowCountsByFolder.GetValueOrDefault(relativePath)
             });
         }
-    }
-
-    private static void DetectReFramework(ProjectScanResult result)
-    {
-        var matchingWorkflowCount = result.Workflows.Count(workflow => ReFrameworkWorkflowNames.Contains(workflow.Name));
-        result.IsReFramework = matchingWorkflowCount >= 3;
     }
 
     private static IEnumerable<UiPathDependency> ReadDependencies(JsonElement root)

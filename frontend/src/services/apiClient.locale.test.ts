@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   analyzeProject,
+  analyzeProcessPdd,
   exportCustomRules,
   exportRuleProfiles,
   getApiLocale,
@@ -42,6 +43,20 @@ describe('api locale', () => {
 
     const request = findRequest(fetchMock, '/api/uipath/projects/analyze');
     expect(JSON.parse(String(request.body))).toMatchObject({ projectPath: '/tmp/project', profileId: 'default', locale: 'tr' });
+  });
+
+  it('adds the selected locale to Process and PDD analysis requests', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ projectName: 'Project', pddFileName: 'PDD.md' }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    setApiLocale('tr');
+
+    await analyzeProcessPdd({ projectPath: '/tmp/project', pddFileName: 'PDD.md', pddContent: '# İş Kuralları' });
+
+    const request = findRequest(fetchMock, '/api/uipath/projects/process-pdd-analysis');
+    expect(JSON.parse(String(request.body))).toMatchObject({ projectPath: '/tmp/project', pddFileName: 'PDD.md', locale: 'tr' });
   });
 
   it('adds the selected locale to rule catalog requests', async () => {

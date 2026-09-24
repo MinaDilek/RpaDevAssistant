@@ -4,7 +4,6 @@ import { vi } from 'vitest';
 import { App } from './main';
 
 const analyzeProject = vi.fn();
-const runAiReview = vi.fn();
 const askProject = vi.fn();
 const getFixSuggestion = vi.fn();
 const applyFix = vi.fn();
@@ -13,7 +12,6 @@ const undoFix = vi.fn();
 
 vi.mock('./services/apiClient', () => ({
   analyzeProject: (...args: unknown[]) => analyzeProject(...args),
-  runAiReview: (...args: unknown[]) => runAiReview(...args),
   askProject: (...args: unknown[]) => askProject(...args),
   getFixSuggestion: (...args: unknown[]) => getFixSuggestion(...args),
   applyFix: (...args: unknown[]) => applyFix(...args),
@@ -30,76 +28,37 @@ vi.mock('./services/apiClient', () => ({
 vi.mock('./services/projectFolderService', () => ({
   isTauriDesktop: vi.fn(() => false),
   selectProjectFolder: vi.fn(async () => null),
+  getDesktopStartupContext: vi.fn(async () => ({})),
 }));
 
 vi.mock('./services/reportExportService', () => ({
   exportReport: vi.fn(async () => 'JSON report downloaded.'),
 }));
 
-describe('App AI review UI', () => {
+describe('App without AI review UI', () => {
   beforeEach(() => {
     analyzeProject.mockResolvedValue(analysisResponse());
-    runAiReview.mockResolvedValue(aiResponse());
   });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('renders privacy notice in AI Review tab', async () => {
+  it('does not expose an AI Review navigation item or analysis tab', async () => {
     render(<App />);
     await analyze();
 
-    await userEvent.click(screen.getByRole('button', { name: 'AI' }));
-
-    expect(screen.getByText(/minimized, redacted project summary/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^AI Review$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^AI$/i })).not.toBeInTheDocument();
   });
 
-  it('shows AI review loading state from the project button', async () => {
-    runAiReview.mockImplementation(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 20));
-      return aiResponse();
-    });
-    render(<App />);
-    await analyze();
-
-    await userEvent.click(screen.getByRole('button', { name: /run ai project review/i }));
-
-    expect(screen.getAllByText(/Analyzing with AI/i).length).toBeGreaterThan(0);
-  });
-
-  it('renders AI review result', async () => {
-    render(<App />);
-    await analyze();
-
-    await userEvent.click(screen.getByRole('button', { name: /run ai project review/i }));
-
-    await waitFor(() => expect(screen.getByText('AI Review Summary')).toBeInTheDocument());
-    expect(screen.getByText('Review summary')).toBeInTheDocument();
-    expect(screen.getByText(/Evidence: RPA001 in Main.xaml/i)).toBeInTheDocument();
-  });
-
-  it('runs workflow AI review from workflow table', async () => {
+  it('does not expose project or workflow AI review actions', async () => {
     render(<App />);
     await analyze();
 
     await userEvent.click(screen.getByRole('button', { name: 'Workflows' }));
-    await userEvent.click(screen.getByRole('button', { name: /review with ai/i }));
-
-    expect(runAiReview).toHaveBeenCalledWith(expect.objectContaining({
-      scope: 'Workflow',
-      workflowPath: 'Main.xaml',
-    }));
-  });
-
-  it('renders API error feedback', async () => {
-    runAiReview.mockRejectedValue(new Error('AI Review is not configured.'));
-    render(<App />);
-    await analyze();
-
-    await userEvent.click(screen.getByRole('button', { name: /run ai project review/i }));
-
-    await waitFor(() => expect(screen.getByText('AI Review is not configured.')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /review with ai/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /run ai project review/i })).not.toBeInTheDocument();
   });
 });
 
@@ -138,29 +97,5 @@ function analysisResponse() {
         activityCount: 2,
       },
     ],
-  };
-}
-
-function aiResponse() {
-  return {
-    isSuccess: true,
-    summary: 'Review summary',
-    riskLevel: 'Low',
-    strengths: ['Readable flow'],
-    issues: [
-      {
-        title: 'Delay usage',
-        severity: 'Medium',
-        description: 'Delay is present.',
-        evidence: 'RPA001 in Main.xaml',
-        recommendation: 'Use state based waiting.',
-        workflowPath: 'Main.xaml',
-        relatedRuleIds: ['RPA001'],
-      },
-    ],
-    recommendations: ['Improve waits'],
-    architectureObservations: ['No major concern'],
-    confidence: 0.8,
-    reviewedScope: 'Project',
   };
 }

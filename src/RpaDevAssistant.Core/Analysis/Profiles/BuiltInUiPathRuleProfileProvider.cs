@@ -5,6 +5,21 @@ using RpaDevAssistant.Core.Analysis.CustomRules;
 public sealed class BuiltInUiPathRuleProfileProvider : IUiPathRuleProfileProvider
 {
     public const string DefaultProfileId = "default";
+    public const string StrictProfileId = "strict";
+    public const string LegacyProfileId = "legacy";
+    public const string ReFrameworkProfileId = "reframework";
+    public const string ModernProfileId = "modern";
+    public const string MigrationProfileId = "migration";
+
+    private static readonly string[] BuiltInProfileIds =
+    [
+        DefaultProfileId,
+        StrictProfileId,
+        LegacyProfileId,
+        ReFrameworkProfileId,
+        ModernProfileId,
+        MigrationProfileId
+    ];
 
     private static readonly UiPathRuleProfile DefaultProfile = new()
     {
@@ -128,10 +143,10 @@ public sealed class BuiltInUiPathRuleProfileProvider : IUiPathRuleProfileProvide
             new UiPathRuleConfiguration
             {
                 RuleId = "RPA015",
-                Enabled = true,
+                Enabled = false,
                 Weight = 1,
                 MaxPenalty = 8,
-                Description = "Missing Explicit Timeout on Critical UI Activity"
+                Description = "Missing Explicit Timeout on Critical UI Activity - disabled by default because timeout defaults vary by UiPath project type."
             },
             new UiPathRuleConfiguration
             {
@@ -244,6 +259,158 @@ public sealed class BuiltInUiPathRuleProfileProvider : IUiPathRuleProfileProvide
                 Weight = 2,
                 MaxPenalty = 8,
                 Description = "Legacy Package Indicator"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA030",
+                Enabled = true,
+                Weight = 5,
+                MaxPenalty = 15,
+                Description = "BusinessRuleException Handling"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA031",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 5,
+                Description = "Argument Naming Convention"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA032",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 5,
+                Description = "Variable Naming Convention"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA033",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 8,
+                Description = "Unused Variable"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA034",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 8,
+                Description = "Unused Argument"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA035",
+                Enabled = true,
+                Weight = 3,
+                MaxPenalty = 10,
+                Description = "Hard-Coded URL"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA036",
+                Enabled = true,
+                Weight = 10,
+                MaxPenalty = 20,
+                Description = "Circular Workflow Reference"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA037",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 8,
+                Description = "Unused Workflow"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA038",
+                Enabled = true,
+                Weight = 2,
+                MaxPenalty = 10,
+                Description = "Argument Direction Mismatch"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA039",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 6,
+                Description = "Unnecessary InOut Argument"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA040",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 8,
+                Description = "Invalid Argument Type Declaration"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA041",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 6,
+                Description = "Overly Broad Variable Scope"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA042",
+                Enabled = true,
+                Weight = 2,
+                MaxPenalty = 10,
+                Description = "Shadowed Variable"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA043",
+                Enabled = true,
+                Weight = 2,
+                MaxPenalty = 10,
+                Description = "Invalid Invoke Workflow Argument Mapping"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA044",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 8,
+                Description = "Missing Invoke Workflow Argument Mapping"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA045",
+                Enabled = true,
+                Weight = 2,
+                MaxPenalty = 10,
+                Description = "Invoke Workflow Argument Direction Mismatch"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA046",
+                Enabled = true,
+                Weight = 1,
+                MaxPenalty = 5,
+                Description = "Fixed Delays Without State-Based Wait"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA047",
+                Enabled = true,
+                Weight = 3,
+                MaxPenalty = 12,
+                Description = "Hard-Coded Queue Name"
+            },
+            new UiPathRuleConfiguration
+            {
+                RuleId = "RPA048",
+                Enabled = true,
+                Weight = 2,
+                MaxPenalty = 10,
+                Description = "Invalid Argument Default Value"
             }
         ]
     };
@@ -262,16 +429,18 @@ public sealed class BuiltInUiPathRuleProfileProvider : IUiPathRuleProfileProvide
     public IReadOnlyList<UiPathRuleProfile> GetProfiles()
     {
         var defaultProfile = BuildDefaultProfile();
+        var builtInProfiles = BuildBuiltInProfiles(defaultProfile);
         if (customProfileRepository is null)
         {
-            return [defaultProfile];
+            return builtInProfiles;
         }
 
-        return customProfileRepository.GetProfiles()
-            .Where(profile => !profile.Id.Equals(DefaultProfileId, StringComparison.OrdinalIgnoreCase))
+        var customProfiles = customProfileRepository.GetProfiles()
+            .Where(profile => !BuiltInProfileIds.Contains(profile.Id, StringComparer.OrdinalIgnoreCase))
             .Select(profile => MergeWithDefault(defaultProfile, profile))
-            .Prepend(defaultProfile)
             .ToArray();
+
+        return builtInProfiles.Concat(customProfiles).ToArray();
     }
 
     public UiPathRuleProfile GetProfile(string? profileId)
@@ -289,6 +458,7 @@ public sealed class BuiltInUiPathRuleProfileProvider : IUiPathRuleProfileProvide
         }
 
         var customConfigurations = customRuleRepository.GetRules()
+            .Where(rule => !rule.IsTemplate)
             .Select(rule => new UiPathRuleConfiguration
             {
                 RuleId = rule.Id,
@@ -308,6 +478,106 @@ public sealed class BuiltInUiPathRuleProfileProvider : IUiPathRuleProfileProvide
         {
             Rules = DefaultProfile.Rules.Concat(customConfigurations).ToArray()
         };
+    }
+
+    private static IReadOnlyList<UiPathRuleProfile> BuildBuiltInProfiles(UiPathRuleProfile defaultProfile)
+    {
+        return
+        [
+            defaultProfile,
+            CreateProfile(
+                defaultProfile,
+                StrictProfileId,
+                "Strict",
+                "High-assurance profile with stronger penalties and all deterministic checks enabled.",
+                rule => rule with
+                {
+                    Enabled = true,
+                    Weight = Scale(rule.Weight, 1.5),
+                    MaxPenalty = Scale(rule.MaxPenalty, 1.5),
+                    SeverityOverride = rule.RuleId is "RPA006" or "RPA007" or "RPA015" or "RPA019" or "RPA021" or "RPA024"
+                        ? RuleSeverity.Warning
+                        : rule.SeverityOverride
+                }),
+            CreateProfile(
+                defaultProfile,
+                LegacyProfileId,
+                "Legacy UiPath",
+                "Compatibility-focused profile for Windows-Legacy and Classic projects.",
+                rule => rule.RuleId switch
+                {
+                    "RPA015" or "RPA016" or "RPA028" or "RPA029" => rule with
+                    {
+                        Enabled = false,
+                        Weight = 0,
+                        MaxPenalty = 0
+                    },
+                    _ => rule
+                }),
+            CreateProfile(
+                defaultProfile,
+                ReFrameworkProfileId,
+                "REFramework",
+                "Profile emphasizing transaction, exception, invocation, Queue and argument contracts in REFramework projects.",
+                rule => rule.RuleId is "RPA002" or "RPA003" or "RPA005" or "RPA030" or "RPA036" or "RPA043" or "RPA044" or "RPA045" or "RPA047"
+                    ? rule with
+                    {
+                        Weight = Scale(rule.Weight, 1.5),
+                        MaxPenalty = Scale(rule.MaxPenalty, 1.5)
+                    }
+                    : rule),
+            CreateProfile(
+                defaultProfile,
+                ModernProfileId,
+                "Modern UiPath",
+                "Profile for Windows/Modern projects with stronger UI Automation and legacy-usage checks.",
+                rule => rule.RuleId switch
+                {
+                    "RPA015" => rule with { Enabled = true },
+                    "RPA016" or "RPA017" or "RPA018" or "RPA019" or "RPA028" or "RPA029" => rule with
+                    {
+                        Weight = Scale(rule.Weight, 1.5),
+                        MaxPenalty = Scale(rule.MaxPenalty, 1.5)
+                    },
+                    _ => rule
+                }),
+            CreateProfile(
+                defaultProfile,
+                MigrationProfileId,
+                "Migration Ready",
+                "Profile emphasizing package, compatibility, legacy activity and workflow contract risks before migration.",
+                rule => rule.RuleId switch
+                {
+                    "RPA015" => rule with { Enabled = true },
+                    "RPA016" or "RPA026" or "RPA027" or "RPA028" or "RPA029" or "RPA035" or "RPA036" or "RPA038" or "RPA040" or "RPA043" or "RPA044" or "RPA045" or "RPA048" => rule with
+                    {
+                        Weight = Scale(rule.Weight, 1.75),
+                        MaxPenalty = Scale(rule.MaxPenalty, 1.75)
+                    },
+                    _ => rule
+                })
+        ];
+    }
+
+    private static UiPathRuleProfile CreateProfile(
+        UiPathRuleProfile source,
+        string id,
+        string name,
+        string description,
+        Func<UiPathRuleConfiguration, UiPathRuleConfiguration> configure)
+    {
+        return new UiPathRuleProfile
+        {
+            Id = id,
+            Name = name,
+            Description = description,
+            Rules = source.Rules.Select(configure).ToArray()
+        };
+    }
+
+    private static double Scale(double value, double multiplier)
+    {
+        return Math.Round(value * multiplier, 2, MidpointRounding.AwayFromZero);
     }
 
     private static UiPathRuleProfile MergeWithDefault(UiPathRuleProfile defaultProfile, UiPathRuleProfile customProfile)

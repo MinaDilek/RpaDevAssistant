@@ -46,6 +46,53 @@ public sealed record UiPathFlowNode
     public IReadOnlyDictionary<string, string?> Properties { get; init; } = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 }
 
+internal static class UiPathFlowchartConversionPolicy
+{
+    public static bool IsCommentedCodeBlock(UiPathFlowNode node)
+    {
+        return IsCommentedCodeBlock(node.ActivityName)
+            || IsCommentedCodeBlock(node.DisplayName)
+            || (node.DisplayName?.TrimStart().StartsWith("//", StringComparison.Ordinal) == true)
+            || (node.DisplayName?.TrimStart().StartsWith("/*", StringComparison.Ordinal) == true)
+            || (node.DisplayName?.TrimStart().StartsWith("<!--", StringComparison.Ordinal) == true);
+    }
+
+    public static bool IsCommentedCodeBlock(string? activityOrDisplayName)
+    {
+        if (string.IsNullOrWhiteSpace(activityOrDisplayName))
+        {
+            return false;
+        }
+
+        var text = activityOrDisplayName.Trim();
+        if (text.StartsWith("//", StringComparison.Ordinal)
+            || text.StartsWith("/*", StringComparison.Ordinal)
+            || text.StartsWith("<!--", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var normalized = text.Replace(" ", string.Empty, StringComparison.Ordinal)
+            .Replace("_", string.Empty, StringComparison.Ordinal);
+
+        var lastColon = normalized.LastIndexOf(':');
+        if (lastColon >= 0 && lastColon < normalized.Length - 1)
+        {
+            normalized = normalized[(lastColon + 1)..];
+        }
+
+        var lastDot = normalized.LastIndexOf('.');
+        if (lastDot >= 0 && lastDot < normalized.Length - 1)
+        {
+            normalized = normalized[(lastDot + 1)..];
+        }
+
+        return normalized.Equals("CommentOut", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("Comment", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("Disabled", StringComparison.OrdinalIgnoreCase);
+    }
+}
+
 public sealed record UiPathFlowEdge
 {
     public required string SourceNodeId { get; init; }
@@ -121,6 +168,8 @@ public sealed record UiPathFlowchartConversionPlan
     public IReadOnlyList<string> ManualReviewItems { get; init; } = [];
 
     public IReadOnlyList<string> PreservedItems { get; init; } = ["Arguments", "Variables", "Activity properties", "Expressions"];
+
+    public IReadOnlyList<UiPathCustomActivityDetection> CustomActivityDetections { get; init; } = [];
 }
 
 public sealed record UiPathFlowchartWorkflowSummary

@@ -1,4 +1,5 @@
 using RpaDevAssistant.Core.Models;
+using RpaDevAssistant.Core.Analysis.Profiles;
 
 namespace RpaDevAssistant.Core.Analysis;
 
@@ -14,4 +15,6 @@ public sealed record UiPathAnalysisContext
         .Select(workflow => workflow.Analysis)
         .Where(analysis => analysis is not null)
         .Cast<UiPathWorkflowAnalysis>();
+
+    public UiPathRuleConfiguration? RuleConfiguration { get; init; }
 }

@@ -1,0 +1,56 @@
+name: Linux Desktop Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+      - name: Install Tauri Linux prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate backend
+        run: |
+          dotnet restore RpaDevAssistant.sln
+          dotnet build RpaDevAssistant.sln --configuration Release --no-restore
+          dotnet test RpaDevAssistant.sln --configuration Release --no-build
+      - name: Validate frontend
+        run: |
+          npm run frontend:test
+          npm run frontend:build
+      - name: Build Linux desktop packages
+        run: npm run desktop:build:linux
+      - name: Verify Linux artifacts
+        run: |
+          test -s frontend/src-tauri/target/release/bundle/deb/*.deb
+          test -s frontend/src-tauri/target/release/bundle/appimage/*.AppImage
+          test -x frontend/src-tauri/bin/RpaDevAssistant.Api-x86_64-unknown-linux-gnu
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rpa-dev-assistant-linux
+          path: |
+            frontend/src-tauri/target/release/bundle/deb/*.deb
+            frontend/src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+          retention-days: 30

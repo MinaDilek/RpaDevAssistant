@@ -25,6 +25,8 @@ public sealed class UiPathProjectScannerTests
         Assert.True(result.IsValid);
         Assert.Equal("SampleProject", result.ProjectName);
         Assert.Equal("Windows", result.Compatibility);
+        Assert.NotNull(result.CompatibilityBehavior);
+        Assert.Equal(RpaDevAssistant.Core.Compatibility.UiPathRuntimeCompatibility.Windows, result.CompatibilityBehavior.Runtime);
         Assert.True(result.ProjectFolderExists);
         Assert.True(result.ProjectJsonExists);
         Assert.True(result.ProjectJsonParsed);

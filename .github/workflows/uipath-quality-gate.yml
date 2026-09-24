@@ -1,0 +1,69 @@
+name: UiPath Quality Gate
+
+on:
+  workflow_call:
+    inputs:
+      project_path:
+        description: Relative path to the UiPath project root
+        required: false
+        default: .
+        type: string
+      minimum_score:
+        description: Minimum accepted quality score
+        required: false
+        default: 70
+        type: number
+      profile_id:
+        description: RPA Dev Assistant rule profile
+        required: false
+        default: default
+        type: string
+  workflow_dispatch:
+    inputs:
+      project_path:
+        description: Relative path to the UiPath project root
+        required: true
+        default: .
+        type: string
+      minimum_score:
+        description: Minimum accepted quality score
+        required: true
+        default: 70
+        type: number
+      profile_id:
+        description: RPA Dev Assistant rule profile
+        required: true
+        default: default
+        type: string
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Restore and build analyzer
+        run: |
+          dotnet restore RpaDevAssistant.sln
+          dotnet build RpaDevAssistant.sln --no-restore --configuration Release
+      - name: Start local analyzer API
+        run: |
+          dotnet run --project src/RpaDevAssistant.Api/RpaDevAssistant.Api.csproj --no-build --configuration Release --urls http://127.0.0.1:5123 > /tmp/rpa-api.log 2>&1 &
+          for attempt in {1..30}; do
+            curl --fail --silent http://127.0.0.1:5123/api/health && exit 0
+            sleep 1
+          done
+          cat /tmp/rpa-api.log
+          exit 1
+      - name: Enforce quality gate
+        env:
+          UIPATH_PROJECT_PATH: ${{ inputs.project_path }}
+          RPA_MINIMUM_SCORE: ${{ inputs.minimum_score }}
+          RPA_PROFILE_ID: ${{ inputs.profile_id }}
+        run: npm run quality-gate

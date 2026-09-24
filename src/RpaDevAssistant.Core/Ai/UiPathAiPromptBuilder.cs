@@ -31,12 +31,15 @@ public sealed class UiPathAiPromptBuilder : IUiPathAiPromptBuilder
         Deterministic findings are authoritative evidence and must not be deleted, contradicted, or rewritten.
         Do not invent activities, workflows, dependencies, databases, credentials, or integrations.
         Clearly distinguish evidence from inference.
+        Put only facts supported by supplied deterministic findings in evidence fields.
+        Put conclusions and recommendations in interpretation fields.
         If evidence is insufficient, say so.
         Prioritize actionable recommendations.
         Do not expose secrets. Values marked [REDACTED] must remain redacted.
         Return only structured JSON matching this shape:
         {
           "summary": "string",
+          "interpretation": "conclusion based on supplied evidence",
           "riskLevel": "Low|Medium|High|Critical",
           "strengths": ["string"],
           "issues": [
@@ -45,6 +48,8 @@ public sealed class UiPathAiPromptBuilder : IUiPathAiPromptBuilder
               "severity": "Info|Low|Medium|High|Critical",
               "description": "string",
               "evidence": "string",
+              "evidenceItems": [{ "statement": "supported fact", "ruleId": "RPA001", "workflowPath": "Main.xaml", "activityName": "Delay" }],
+              "interpretation": "conclusion based on evidence",
               "recommendation": "string",
               "workflowPath": "string or null",
               "relatedRuleIds": ["RPA001"]

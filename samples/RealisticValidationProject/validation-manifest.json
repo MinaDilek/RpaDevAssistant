@@ -18,7 +18,6 @@
     { "ruleId": "RPA012", "workflowPath": "Business/Login.xaml", "minimumCount": 1, "severity": "Warning" },
     { "ruleId": "RPA013", "workflowPath": "Business/Login.xaml", "minimumCount": 3, "severity": "Warning" },
     { "ruleId": "RPA014", "workflowPath": "Business/Login.xaml", "minimumCount": 1, "severity": "Error" },
-    { "ruleId": "RPA015", "workflowPath": "Business/SelectorIssues.xaml", "minimumCount": 1, "severity": "Suggestion" },
     { "ruleId": "RPA016", "workflowPath": "Business/SelectorIssues.xaml", "minimumCount": 1, "severity": "Suggestion" },
     { "ruleId": "RPA017", "workflowPath": "Business/Login.xaml", "minimumCount": 1, "severity": "Warning" },
     { "ruleId": "RPA018", "workflowPath": "Business/SelectorIssues.xaml", "minimumCount": 1, "severity": "Warning" },
@@ -28,7 +27,8 @@
     { "ruleId": "RPA022", "workflowPath": "Business/CallExternalApi.xaml", "minimumCount": 1, "severity": "Warning" },
     { "ruleId": "RPA023", "workflowPath": "Business/CallExternalApi.xaml", "minimumCount": 1, "severity": "Warning" },
     { "ruleId": "RPA024", "workflowPath": "Business/ArgumentsHeavy.xaml", "minimumCount": 1, "severity": "Suggestion" },
-    { "ruleId": "RPA025", "workflowPath": "Business/LargeWorkflow.xaml", "minimumCount": 1, "severity": "Warning" }
+    { "ruleId": "RPA025", "workflowPath": "Business/LargeWorkflow.xaml", "minimumCount": 1, "severity": "Warning" },
+    { "ruleId": "RPA030", "workflowPath": "Business/CallExternalApi.xaml", "minimumCount": 1, "severity": "Warning" }
   ],
   "expectedNoFindings": [
     { "ruleId": "RPA009", "workflowPath": "Framework/InitAllSettings.xaml", "reason": "Credential name is read from Config." },

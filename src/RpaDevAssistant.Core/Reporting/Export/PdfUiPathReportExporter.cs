@@ -1,10 +1,18 @@
 using System.Globalization;
 using System.Text;
+using RpaDevAssistant.Core.Localization;
 
 namespace RpaDevAssistant.Core.Reporting.Export;
 
 public sealed class PdfUiPathReportExporter : IUiPathReportExporter
 {
+    private readonly IRpaDevAssistantLocalizer localizer;
+
+    public PdfUiPathReportExporter(IRpaDevAssistantLocalizer? localizer = null)
+    {
+        this.localizer = localizer ?? new RpaDevAssistantLocalizer();
+    }
+
     public UiPathReportExportFormat Format => UiPathReportExportFormat.Pdf;
 
     public UiPathReportExportResult Export(UiPathAnalysisReport report, string? locale = null)
@@ -15,13 +23,13 @@ public sealed class PdfUiPathReportExporter : IUiPathReportExporter
         {
             FileName = UiPathReportFileNameGenerator.Generate(report.ProjectName, report.GeneratedAtUtc, Format),
             ContentType = "application/pdf",
-            Content = BuildPdf(report)
+            Content = BuildPdf(report, localizer.NormalizeLocale(locale), localizer)
         };
     }
 
-    private static string BuildPdf(UiPathAnalysisReport report)
+    private static string BuildPdf(UiPathAnalysisReport report, string locale, IRpaDevAssistantLocalizer localizer)
     {
-        var lines = BuildLines(report);
+        var lines = BuildLines(report, locale, localizer);
         var pages = lines.Chunk(42).Select(BuildPageStream).ToArray();
         var objects = new List<string>
         {
@@ -58,11 +66,13 @@ public sealed class PdfUiPathReportExporter : IUiPathReportExporter
         return builder.ToString();
     }
 
-    private static IReadOnlyList<string> BuildLines(UiPathAnalysisReport report)
+    private static IReadOnlyList<string> BuildLines(UiPathAnalysisReport report, string locale, IRpaDevAssistantLocalizer localizer)
     {
+        var executive = report.Summary.ExecutiveSummary;
         var lines = new List<string>
         {
-            "RPA Dev Assistant Analysis Report",
+            report.Branding?.CompanyName ?? "RPA Dev Assistant Analysis Report",
+            report.Branding is null ? string.Empty : localizer.Get("Reports.Title", locale),
             $"Generated: {report.GeneratedAtUtc:u}",
             $"Project: {report.ProjectName ?? "UiPath Project"}",
             $"Path: {report.ProjectPath}",
@@ -71,10 +81,61 @@ public sealed class PdfUiPathReportExporter : IUiPathReportExporter
             $"Activities: {report.TotalActivityCount}",
             $"Findings: {report.Summary.TotalFindings} (Critical {report.Summary.CriticalCount}, Error {report.Summary.ErrorCount}, Warning {report.Summary.WarningCount}, Suggestion {report.Summary.SuggestionCount}, Info {report.Summary.InfoCount})",
             string.Empty,
+            localizer.Get("Reports.ExecutiveSummary", locale),
+            localizer.Get("Reports.ExecutiveNarrative", locale, new Dictionary<string, string?>
+            {
+                ["risk"] = localizer.Get($"Reports.RiskLevel.{executive.RiskLevel}", locale),
+                ["score"] = report.QualityScore.ToString(CultureInfo.InvariantCulture),
+                ["criticalErrors"] = executive.CriticalAndErrorFindings.ToString(CultureInfo.InvariantCulture),
+                ["workflows"] = executive.WorkflowsRequiringAttention.ToString(CultureInfo.InvariantCulture)
+            }),
+            string.IsNullOrWhiteSpace(executive.MostAffectedWorkflow)
+                ? string.Empty
+                : localizer.Get("Reports.MostAffectedWorkflowNarrative", locale, new Dictionary<string, string?>
+                {
+                    ["workflow"] = executive.MostAffectedWorkflow,
+                    ["count"] = executive.MostAffectedWorkflowFindingCount.ToString(CultureInfo.InvariantCulture)
+                }),
+            $"{localizer.Get("Reports.PriorityRules", locale)}: {string.Join(", ", executive.PriorityRuleIds)}",
+            string.Empty,
             "Top Rules"
         };
 
         lines.AddRange(report.Summary.TopRules.Take(10).Select(item => $"{item.Name}: {item.Count}"));
+        if (report.Compliance is not null)
+        {
+            lines.Add(string.Empty);
+            lines.Add(localizer.Get("Reports.Compliance", locale));
+            lines.Add($"{localizer.Get("Reports.Standard", locale)}: {report.Compliance.StandardName}");
+            lines.Add($"{localizer.Get("Reports.ComplianceRate", locale)}: {report.Compliance.CompliancePercentage:0.##}%");
+            lines.AddRange(report.Compliance.Violations.Take(20).Select(item => $"{item.RuleId} {item.RuleName}: {item.FindingCount}"));
+        }
+
+        if (report.Comparison is not null)
+        {
+            lines.Add(string.Empty);
+            lines.Add(localizer.Get("Reports.Comparison", locale));
+            lines.Add($"{localizer.Get("Reports.ScoreDelta", locale)}: {report.Comparison.ScoreDelta:+0;-0;0}");
+            lines.Add($"{localizer.Get("Reports.FindingDelta", locale)}: {report.Comparison.TotalFindingDelta:+0;-0;0}");
+            lines.Add($"{localizer.Get("Reports.NewFindings", locale)}: {report.Comparison.NewFindings.Count}");
+            lines.Add($"{localizer.Get("Reports.ResolvedFindings", locale)}: {report.Comparison.ResolvedFindings.Count}");
+        }
+
+        if (report.AiReview is not null)
+        {
+            lines.Add(string.Empty);
+            lines.Add(localizer.Get("Reports.AiReview", locale));
+            lines.Add(report.AiReview.Summary);
+            lines.AddRange(report.AiReview.Issues.Take(20).Select(issue => $"{issue.Title}: {issue.Recommendation}"));
+        }
+
+        if (report.FixSuggestions is not null)
+        {
+            lines.Add(string.Empty);
+            lines.Add(localizer.Get("Reports.FixSuggestions", locale));
+            lines.AddRange(report.FixSuggestions.Suggestions.Take(30).Select(suggestion => $"{suggestion.RuleId} {suggestion.Title}: {suggestion.ProposedState ?? suggestion.Description}"));
+        }
+
         lines.Add(string.Empty);
         lines.Add("Findings");
         lines.AddRange(report.Findings.Take(80).Select(finding => $"{finding.RuleId} {finding.Severity} {finding.WorkflowPath ?? "-"} - {finding.Message ?? finding.RuleName}"));

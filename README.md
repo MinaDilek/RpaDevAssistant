@@ -54,6 +54,19 @@ UiPathStaticAnalysisResult
 UiPathQualityScore
 ```
 
+### UiPath compatibility behavior matrix
+
+Runtime compatibility and design experience are resolved as separate dimensions. `Windows` / `Windows-Legacy` describe the runtime target, while `Modern` / `Classic` describe activity usage detected from parsed workflows. This prevents compatibility-sensitive rules from relying on broad string matching.
+
+| Project signal | Runtime behavior | Activity behavior | Legacy UI activity rule (RPA016) |
+| --- | --- | --- | --- |
+| Windows | Modern and Classic activities are supported | Modern, Classic, Mixed, or Unknown is derived from activities | Runs because Windows is a modern-capable runtime |
+| Windows-Legacy | Classic activities are supported; modernization is a migration concern | Defaults to Classic when no stronger evidence exists | Suppressed to avoid per-activity migration noise |
+| Modern | Modern design experience is explicit or detected | Modern UI automation is preferred | Legacy UI activities are reported |
+| Classic | Classic design experience is explicit or detected | Classic activities are treated as intentional | Suppressed; migration can be reviewed separately |
+
+Cross-platform/Portable metadata is also recognized. It supports modern activities and treats detected Classic UI activities as incompatible migration candidates. Unknown metadata remains conservative and does not create compatibility-only findings without activity evidence.
+
 Rules implement `IUiPathAnalysisRule` and are registered through dependency injection. Each rule receives a project analysis context and returns findings independently. This keeps the engine ready for future rule enable/disable flags, severity overrides, company-specific rules, custom configuration, and rule profiles without binding the engine to a hard-coded switch statement.
 
 Severity levels:
@@ -787,7 +800,7 @@ The Core project owns provider-independent abstractions:
 - `IUiPathAiReviewProvider` hides the concrete provider implementation.
 - `ISecretRedactor` removes sensitive values before any prompt is sent.
 
-`RpaDevAssistant.Infrastructure` contains the first provider implementation, `OpenAiUiPathReviewProvider`, which calls the OpenAI Responses API and parses a structured JSON result. The API key is read from `OPENAI_API_KEY`, `OpenAI:ApiKey`, or `.env.local` during local development. Do not commit `.env.local`.
+`RpaDevAssistant.Infrastructure` contains the OpenAI-compatible provider implementation used by AI Review, Ask Project, and AI Fix. `AI:Provider` selects either the hosted `OpenAI` service or a localhost-only `Local` endpoint. The existing OpenAI behavior remains the default; its API key is read from `OPENAI_API_KEY`, `OpenAI:ApiKey`, or `.env.local` during local development. Do not commit `.env.local`.
 
 Security and privacy behavior:
 
@@ -809,10 +822,23 @@ Prompt strategy:
 Configuration:
 
 ```bash
+AI__Provider=OpenAI
 OPENAI_API_KEY=sk-...
 OpenAI__Model=gpt-5.6-mini
 OpenAI__MaxOutputTokens=1200
 ```
+
+For a local model server exposing an OpenAI-compatible Responses API, select `Local` and provide the full `/v1/responses` endpoint:
+
+```bash
+AI__Provider=Local
+AI__LocalEndpoint=http://127.0.0.1:11434/v1/responses
+AI__LocalModel=your-local-model
+# Optional when the local server requires authentication:
+AI__LocalApiKey=
+```
+
+The local endpoint is accepted only when its host is `localhost` or a numeric loopback address such as `127.0.0.1` or `::1`. User info, query strings, fragments, LAN addresses, remote hosts, and HTTP redirects are rejected. The endpoint is shared by AI Review, Ask Project, and AI Fix; provider secrets and response payloads are not written to logs. Local servers must implement the OpenAI Responses API request and response shapes used by this application.
 
 AI project review endpoint:
 
@@ -1174,7 +1200,15 @@ RequiresAi=false
 CanAutoApply=true
 ```
 
-Everything else remains preview-only. Delay replacement, exception handling changes, logging insertion, workflow rename, Invoke Workflow reference changes, and all AI-assisted fixes must be applied manually in UiPath Studio.
+Everything else remains preview-only in the generic auto-apply path. Delay replacement, exception handling changes, logging insertion, and all AI-assisted fixes must be applied manually in UiPath Studio.
+
+Workflow rename is available as a separate, explicitly confirmed RPA006 transaction rather than through the generic auto-apply whitelist. The user supplies the final project-relative `.xaml` path. The service locks project workflows, rejects stale hashes and path traversal, backs up the renamed workflow and every changed caller, updates only statically resolved `Invoke Workflow File` references with XML-aware mutation, preserves caller-relative separator style, validates every resulting XAML file, and rolls the complete transaction back on failure. Dynamic workflow references are never guessed; they are returned for manual review.
+
+```bash
+curl -X POST http://localhost:5000/api/uipath/projects/fixes/rename-workflow \
+  -H "Content-Type: application/json" \
+  -d '{"projectPath":"/path/to/project","workflowPath":"workflow1.xaml","newWorkflowPath":"Business/ProcessInvoice.xaml","expectedFileHash":"sha256..."}'
+```
 
 Apply flow:
 
@@ -1239,6 +1273,14 @@ Example apply response:
   "backupId": "20260830-021530123",
   "requiresReanalysis": true
 }
+```
+
+The Findings screen also offers **Apply all safe fixes** when eligible RPA007 occurrences exist. The bulk endpoint does not broaden the mutation whitelist: it expands aggregated RPA007 details internally, refreshes every suggestion and file hash immediately before applying, delegates each change to the same single-fix backup/validation pipeline, and stops at the first failure. A partially completed batch remains fully auditable and individually undoable.
+
+```bash
+curl -X POST http://localhost:5000/api/uipath/projects/fixes/apply-all \
+  -H "Content-Type: application/json" \
+  -d '{"projectPath": "/path/to/uipath/project", "profileId": "default", "maxFixes": 100, "createBackup": true}'
 ```
 
 Support table:
@@ -1457,6 +1499,12 @@ HTML reports include a `Workflow Complexity` section with localized TR/EN labels
 
 ## Desktop Application
 
+### Signed Desktop Updates
+
+The packaged desktop app checks the HTTPS GitHub Releases updater endpoint in the background. It never installs an update automatically. When a newer signed version is available, Settings > About shows the version and release notes; installation starts only after the user selects **Download and Install**.
+
+Tauri verifies every updater archive with the public key embedded in `tauri.conf.json`. The matching private key is stored as the GitHub Actions secret `TAURI_SIGNING_PRIVATE_KEY` and is never committed to the repository. A `v*` Windows release build uses `tauri.updater.conf.json`, produces the signed NSIS updater archive, creates `latest.json`, and uploads those files to the matching GitHub Release. Browser development mode never calls the native updater.
+
 RPA Dev Assistant can run as a local desktop app through Tauri. The desktop shell reuses the React + TypeScript + Vite frontend and starts the existing .NET backend as a bundled sidecar. Backend logic is not rewritten in Rust.
 
 Desktop architecture:
@@ -1523,7 +1571,42 @@ Tauri installer output is expected under:
 frontend/src-tauri/target/release/bundle/nsis/
 ```
 
-The first MVP is unsigned. Windows SmartScreen may warn about the installer or executable until code signing is added.
+The Windows release workflow at `.github/workflows/windows-desktop-release.yml` validates backend/frontend code, publishes the sidecar, builds the NSIS installer, verifies a non-empty artifact, and uploads it. When `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD` repository secrets are configured, the installer is Authenticode-signed with a trusted timestamp. Unsigned builds may trigger Windows SmartScreen.
+
+Linux packaging is defined by `npm run desktop:build:linux` and `.github/workflows/linux-desktop-release.yml`. It publishes a self-contained `linux-x64` backend sidecar and builds both `.deb` and AppImage artifacts on Ubuntu 22.04. Linux remains a secondary target until that workflow has produced and smoke-tested real artifacts; Windows 10/11 remains the primary supported desktop platform.
+
+Runtime configuration is centralized under the `RpaDevAssistant` configuration section and supports standard .NET environment overrides (`__` separator). Safe defaults are included in `src/RpaDevAssistant.Api/appsettings.json` for local desktop use. Configurable values include the desktop CORS allowlist, custom rule/profile storage files, analysis history root/retention, and official package metadata timeout/cache settings. Startup fails with a clear validation error for malformed origins, non-HTTPS metadata endpoints, or non-positive durations.
+
+Example overrides:
+
+```bash
+RpaDevAssistant__AllowedOrigins__0=http://127.0.0.1:5173
+RpaDevAssistant__Storage__AnalysisHistoryRoot=/path/to/local/history
+RpaDevAssistant__History__MaxSnapshotsPerProject=20
+RpaDevAssistant__Features__Ai=false
+```
+
+### UiPath Orchestrator Inventory
+
+Orchestrator integration is optional and read-only. Configure it through backend environment variables; the access token is never returned to the frontend or written to diagnostics:
+
+```bash
+RpaDevAssistant__Orchestrator__BaseUrl=https://cloud.uipath.com/org/tenant/orchestrator_/
+RpaDevAssistant__Orchestrator__AccessToken=your-short-lived-token
+RpaDevAssistant__Orchestrator__TenantName=tenant-name
+RpaDevAssistant__Orchestrator__FolderId=12345
+RpaDevAssistant__Orchestrator__DeploymentType=AutomationCloud
+```
+
+For Automation Suite, use its HTTPS Orchestrator base URL and set `DeploymentType=AutomationSuite`. The Orchestrator screen reads Process release metadata, Queue definitions, Asset names/types/scopes, and Machine names/types. Asset values and credential contents are deliberately not requested. A missing configuration produces an explicit not-configured state rather than sample data.
+
+### Declarative Rule Modules
+
+The Rules screen can export and import a versioned JSON module containing custom rules and custom rule profiles. A module includes `schemaVersion`, `moduleId`, `name`, `version`, optional publisher metadata, rules, and profiles. The complete manifest is validated before persistence; duplicate IDs, unsupported schemas, invalid conditions, invalid scoring values, and attempts to use the built-in `RPA` prefix are rejected. Modules are data-only and never load executable DLLs or scripts.
+
+Feature flags are exposed read-only at `GET /api/features`. The `Ai`, `FileMutations`, `ConfigGeneration`, and `FlowchartConversion` flags default to enabled; when disabled, only their mapped endpoints return `FEATURE_DISABLED`, while scanning and health endpoints remain available.
+
+Local diagnostics are privacy-preserving. Crash reporting is enabled by default and stores only timestamp, operation ID, HTTP method/route, and exception type under the local application-data diagnostics directory. Opt-in usage telemetry is disabled by default; when enabled with `RpaDevAssistant__Diagnostics__TelemetryEnabled=true`, it stores only route, status, and duration. Request bodies, query strings, project paths, XAML, and exception messages are never written. `GET /api/diagnostics/summary` exposes in-process counters without returning log contents.
 
 Desktop security notes:
 
@@ -1531,3 +1614,46 @@ Desktop security notes:
 - The frontend learns the runtime backend URL through a single API base URL helper.
 - Native folder selection only returns the folder selected by the user.
 - Tauri permissions are limited to dialog open and sidecar process lifecycle.
+
+## CI/CD Quality Gate
+
+The quality gate evaluates the same deterministic analysis response used by the desktop app. It fails with exit code `2` when the quality score is below the configured minimum or when enabled severity gates detect `Error`/`Critical` findings. Transport or configuration failures use exit code `1`.
+
+With the backend running locally:
+
+```bash
+npm run quality-gate -- --project /path/to/uipath/project --minimum-score 80
+```
+
+Configuration can also be supplied through `UIPATH_PROJECT_PATH`, `RPA_API_URL`, `RPA_PROFILE_ID`, `RPA_MINIMUM_SCORE`, `RPA_FAIL_ON_ERROR`, and `RPA_FAIL_ON_CRITICAL`. The reusable `.github/workflows/uipath-quality-gate.yml` workflow restores and starts the analyzer before enforcing this policy. It can be called from a UiPath repository with `workflow_call` or run manually with `workflow_dispatch`.
+
+## Git Commit And Branch Comparison
+
+The Change History screen can compare two local Git refs such as `HEAD~1` and `HEAD`, two commit SHAs, or two branch names. The backend resolves each ref, exports the selected UiPath project from each revision into isolated temporary directories with `git archive`, and runs the existing production analyzer on both snapshots. It reports score and finding deltas, new and resolved findings, and changed files.
+
+The operation is read-only: it does not run checkout, reset, or modify the working tree. The project must already be inside a local Git repository.
+
+### Pull Request Review
+
+GitHub, GitLab, and Azure DevOps pull/merge requests can be reviewed from Change History. Provider credentials remain in the local .NET backend; the frontend sends only the provider, repository identifier, pull request number, selected profile, and local project path.
+
+```bash
+RpaDevAssistant__SourceControl__GitHub__AccessToken=github-token
+RpaDevAssistant__SourceControl__GitLab__AccessToken=gitlab-token
+RpaDevAssistant__SourceControl__AzureDevOps__BaseUrl=https://dev.azure.com/organization/project/
+RpaDevAssistant__SourceControl__AzureDevOps__AccessToken=azure-devops-pat
+```
+
+The provider API resolves Pull Request metadata and base/head commit SHA values. Analysis remains local and read-only, so both commits must already exist in the selected clone. RPA Dev Assistant does not fetch, checkout, reset, or alter the repository. Publishing the generated review summary as a PR comment is a separate explicit user action.
+
+## UiPath Studio Workflow Opening
+
+In the desktop application, Workflow Detail can open the selected project-relative `.xaml` file with the operating system's registered application, normally UiPath Studio on Windows. The Tauri command canonicalizes both paths, requires `project.json`, rejects files outside the selected project, and accepts only existing `.xaml` files. The action is disabled in browser mode.
+
+The packaged executable can also be registered as a UiPath Studio External Tool. Pass the project root and the selected project-relative workflow:
+
+```text
+RPA Dev Assistant.exe --project "C:\\UiPath\\InvoiceAutomation" --workflow "Business\\Login.xaml"
+```
+
+After the local backend is ready, the desktop app runs the normal production project analysis and opens the requested Workflow Detail. The External Tool registration itself remains a user/organization Studio setting; no UiPath package is injected into analyzed projects.

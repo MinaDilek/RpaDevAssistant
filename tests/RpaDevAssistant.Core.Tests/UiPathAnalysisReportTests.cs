@@ -5,6 +5,9 @@ using RpaDevAssistant.Core.Analysis.Scoring;
 using RpaDevAssistant.Core.Models;
 using RpaDevAssistant.Core.Reporting;
 using RpaDevAssistant.Core.Reporting.Export;
+using RpaDevAssistant.Core.Ai;
+using RpaDevAssistant.Core.Fixes;
+using RpaDevAssistant.Core.History;
 using Xunit;
 
 namespace RpaDevAssistant.Core.Tests;
@@ -20,6 +23,10 @@ public sealed class UiPathAnalysisReportTests
         Assert.Equal(1, report.Summary.ErrorCount);
         Assert.Equal(1, report.Summary.WarningCount);
         Assert.Equal(2, report.Summary.WorkflowsWithFindings);
+        Assert.Equal("High", report.Summary.ExecutiveSummary.RiskLevel);
+        Assert.Equal(1, report.Summary.ExecutiveSummary.CriticalAndErrorFindings);
+        Assert.Equal("Business.xaml", report.Summary.ExecutiveSummary.MostAffectedWorkflow);
+        Assert.Contains("RPA002", report.Summary.ExecutiveSummary.PriorityRuleIds);
     }
 
     [Fact]
@@ -84,6 +91,39 @@ public sealed class UiPathAnalysisReportTests
     }
 
     [Fact]
+    public void Build_CalculatesProfileComplianceFromEnabledRules()
+    {
+        var report = BuildReport(Findings(Finding("RPA001", RuleSeverity.Warning, "Main.xaml")));
+
+        Assert.NotNull(report.Compliance);
+        Assert.Equal(2, report.Compliance.EvaluatedRuleCount);
+        Assert.Equal(1, report.Compliance.CompliantRuleCount);
+        Assert.Equal(1, report.Compliance.NonCompliantRuleCount);
+        Assert.Equal(50, report.Compliance.CompliancePercentage);
+        Assert.Equal("RPA001", Assert.Single(report.Compliance.Violations).RuleId);
+    }
+
+    [Fact]
+    public void JsonExporter_PreservesSchemaAndIncludesOptionalReportSections()
+    {
+        var report = BuildReport(Findings()) with
+        {
+            Comparison = Comparison(),
+            AiReview = AiReview(),
+            FixSuggestions = FixSuggestions(),
+            Branding = new UiPathReportBranding { CompanyName = "Contoso", AccentColor = "#123456" }
+        };
+
+        using var document = JsonDocument.Parse(new JsonUiPathReportExporter().Export(report).Content);
+        var root = document.RootElement;
+        Assert.Equal("1.0", root.GetProperty("schemaVersion").GetString());
+        Assert.Equal(5, root.GetProperty("comparison").GetProperty("scoreDelta").GetInt32());
+        Assert.Equal("Evidence-based review", root.GetProperty("aiReview").GetProperty("summary").GetString());
+        Assert.Single(root.GetProperty("fixSuggestions").GetProperty("suggestions").EnumerateArray());
+        Assert.Equal("Contoso", root.GetProperty("branding").GetProperty("companyName").GetString());
+    }
+
+    [Fact]
     public void HtmlExporter_ProducesStandaloneDocument()
     {
         var export = new HtmlUiPathReportExporter().Export(BuildReport(Findings()));
@@ -91,6 +131,21 @@ public sealed class UiPathAnalysisReportTests
         Assert.StartsWith("<!doctype html>", export.Content, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("<style>", export.Content, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("UiPath Project Analysis Report", export.Content, StringComparison.Ordinal);
+        Assert.Contains("Executive Summary", export.Content, StringComparison.Ordinal);
+        Assert.Contains("Overall risk", export.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HtmlExporter_LocalizesExecutiveSummaryInTurkish()
+    {
+        var export = new HtmlUiPathReportExporter().Export(
+            BuildReport(Findings(Finding("RPA002", RuleSeverity.Error, "Main.xaml"))),
+            "tr");
+
+        var decoded = System.Net.WebUtility.HtmlDecode(export.Content);
+        Assert.Contains("Yönetici Özeti", decoded, StringComparison.Ordinal);
+        Assert.Contains("Genel risk Yüksek", decoded, StringComparison.Ordinal);
+        Assert.Contains("Main.xaml", decoded, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -149,6 +204,64 @@ public sealed class UiPathAnalysisReportTests
         Assert.Contains("Exception Silently Swallowed", export.Content, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("en", "Company Standard Compliance", "Previous Analysis Comparison", "Fix Suggestions")]
+    [InlineData("tr", "Şirket Standardı Uyumluluğu", "Önceki Analizle Karşılaştırma", "Fix Önerileri")]
+    public void HtmlExporter_RendersExtendedSectionsWithBranding(string locale, string compliance, string comparison, string fixes)
+    {
+        var report = BuildReport(Findings(Finding("RPA001", RuleSeverity.Warning, "Main.xaml"))) with
+        {
+            Comparison = Comparison(),
+            AiReview = AiReview(),
+            FixSuggestions = FixSuggestions(),
+            Branding = new UiPathReportBranding
+            {
+                CompanyName = "Contoso RPA",
+                AccentColor = "#123456",
+                LogoDataUri = "data:image/png;base64,iVBORw0KGgo="
+            }
+        };
+
+        var export = new HtmlUiPathReportExporter().Export(report, locale);
+        var decoded = System.Net.WebUtility.HtmlDecode(export.Content);
+
+        Assert.Contains("Contoso RPA", decoded, StringComparison.Ordinal);
+        Assert.Contains("#123456", export.Content, StringComparison.Ordinal);
+        Assert.Contains("data:image/png;base64,iVBORw0KGgo=", export.Content, StringComparison.Ordinal);
+        Assert.Contains(compliance, decoded, StringComparison.Ordinal);
+        Assert.Contains(comparison, decoded, StringComparison.Ordinal);
+        Assert.Contains(fixes, decoded, StringComparison.Ordinal);
+        Assert.Contains("Evidence-based review", decoded, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReportService_OptInSectionsUseExistingHistoryAiAndFixServices()
+    {
+        var analysis = AnalysisResult(Findings(Finding("RPA001", RuleSeverity.Warning, "Main.xaml")));
+        var service = new UiPathAnalysisReportService(
+            new StubAnalyzer(analysis),
+            new UiPathAnalysisReportBuilder(),
+            new StubHistoryService(Comparison()),
+            new StubAiReviewService(AiReview()),
+            new StubFixSuggestionService(FixSuggestions()),
+            new UiPathReportBranding { CompanyName = "Configured Company", AccentColor = "not-a-color" });
+
+        var report = await service.GenerateAsync(new UiPathReportGenerationOptions
+        {
+            ProjectPath = analysis.ProjectPath,
+            IncludeComparison = true,
+            IncludeAiReview = true,
+            IncludeFixSuggestions = true,
+            Locale = "tr"
+        });
+
+        Assert.Equal(5, report.Comparison?.ScoreDelta);
+        Assert.Equal("Evidence-based review", report.AiReview?.Summary);
+        Assert.Single(report.FixSuggestions?.Suggestions ?? []);
+        Assert.Equal("Configured Company", report.Branding?.CompanyName);
+        Assert.Null(report.Branding?.AccentColor);
+    }
+
     [Fact]
     public void FileNameGenerator_RemovesInvalidWindowsCharacters()
     {
@@ -187,6 +300,12 @@ public sealed class UiPathAnalysisReportTests
 
     private static UiPathAnalysisReport BuildReport(UiPathStaticAnalysisResult analysis)
     {
+        var result = AnalysisResult(analysis);
+        return new UiPathAnalysisReportBuilder().Build(result.ProjectScan, result.Analysis, result.QualityScore, result.Profile);
+    }
+
+    private static UiPathProjectAnalysisResult AnalysisResult(UiPathStaticAnalysisResult analysis)
+    {
         var project = new ProjectScanResult
         {
             ProjectPath = "/tmp/Project",
@@ -203,7 +322,12 @@ public sealed class UiPathAnalysisReportTests
         var profile = new UiPathRuleProfile
         {
             Id = "default",
-            Name = "Default"
+            Name = "Default",
+            Rules =
+            [
+                new UiPathRuleConfiguration { RuleId = "RPA001", Enabled = true },
+                new UiPathRuleConfiguration { RuleId = "RPA002", Enabled = true }
+            ]
         };
         var score = new UiPathQualityScore
         {
@@ -228,7 +352,13 @@ public sealed class UiPathAnalysisReportTests
             ]
         };
 
-        return new UiPathAnalysisReportBuilder().Build(project, analysis, score, profile);
+        return new UiPathProjectAnalysisResult
+        {
+            ProjectScan = project,
+            Analysis = analysis,
+            QualityScore = score,
+            Profile = profile
+        };
     }
 
     private static UiPathWorkflowInfo Workflow(string relativePath, int activityCount)
@@ -281,5 +411,70 @@ public sealed class UiPathAnalysisReportTests
             ActivityDisplayName = activityDisplayName,
             Recommendation = "Fix it"
         };
+    }
+
+    private static UiPathAnalysisComparison Comparison() => new()
+    {
+        BaselineSnapshotId = "before",
+        TargetSnapshotId = "after",
+        ScoreDelta = 5,
+        GradeBefore = "C",
+        GradeAfter = "B",
+        TotalFindingDelta = -2
+    };
+
+    private static UiPathAiReviewResult AiReview() => new()
+    {
+        Summary = "Evidence-based review",
+        RiskLevel = UiPathAiRiskLevel.Medium,
+        ReviewedScope = UiPathAiReviewScope.Project,
+        Confidence = 0.9
+    };
+
+    private static UiPathFixSuggestionsBulkResult FixSuggestions() => new()
+    {
+        TotalFindings = 1,
+        FixableFindings = 1,
+        Suggestions =
+        [
+            new UiPathFixSuggestion
+            {
+                Id = "fix-1",
+                RuleId = "RPA007",
+                Title = "Improve DisplayName",
+                Description = "Use a descriptive DisplayName.",
+                Explanation = "Improves readability.",
+                CurrentValue = "Click",
+                SuggestedValue = "Click Login",
+                WorkflowPath = "Main.xaml",
+                RiskLevel = UiPathFixRiskLevel.Low,
+                Confidence = UiPathFixConfidence.High
+            }
+        ]
+    };
+
+    private sealed class StubAnalyzer(UiPathProjectAnalysisResult result) : IUiPathProjectAnalyzer
+    {
+        public UiPathProjectAnalysisResult Analyze(string projectPath, string? profileId = null) => result;
+    }
+
+    private sealed class StubHistoryService(UiPathAnalysisComparison comparison) : IUiPathAnalysisHistoryService
+    {
+        public UiPathAnalysisSnapshotSaveResult SaveSnapshot(UiPathProjectAnalysisResult analysis) => throw new NotSupportedException();
+        public UiPathAnalysisHistoryList ListSnapshots() => new();
+        public UiPathAnalysisHistoryList ListSnapshots(string projectPath) => new();
+        public UiPathAnalysisComparison? Compare(string projectPath, string baselineSnapshotId, string targetSnapshotId) => comparison;
+        public UiPathAnalysisComparison? CompareLatestWithPrevious(string projectPath) => comparison;
+    }
+
+    private sealed class StubAiReviewService(UiPathAiReviewResult result) : IUiPathAiReviewService
+    {
+        public Task<UiPathAiReviewResult> ReviewAsync(string projectPath, string? profileId, UiPathAiReviewScope scope, string? workflowPath, string? additionalInstructions, CancellationToken cancellationToken, string? locale = null) => Task.FromResult(result);
+    }
+
+    private sealed class StubFixSuggestionService(UiPathFixSuggestionsBulkResult result) : IUiPathFixSuggestionService
+    {
+        public Task<UiPathFixSuggestionResult> SuggestAsync(UiPathFixSuggestionRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<UiPathFixSuggestionsBulkResult> SuggestAllDeterministicAsync(UiPathFixSuggestionsBulkRequest request, CancellationToken cancellationToken) => Task.FromResult(result);
     }
 }

@@ -7,4 +7,8 @@ public sealed record UiPathArgumentInfo
     public string? Direction { get; init; }
 
     public string? Type { get; init; }
+
+    public string? DefaultValue { get; init; }
+
+    public bool HasDefaultValue { get; init; }
 }

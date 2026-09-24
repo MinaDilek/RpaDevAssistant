@@ -2,6 +2,8 @@ namespace RpaDevAssistant.Core.Reporting;
 
 public sealed record UiPathReportSummary
 {
+    public required UiPathExecutiveSummary ExecutiveSummary { get; init; }
+
     public int TotalFindings { get; init; }
 
     public int CriticalCount { get; init; }

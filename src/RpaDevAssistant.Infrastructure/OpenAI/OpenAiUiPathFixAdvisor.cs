@@ -29,9 +29,11 @@ public sealed class OpenAiUiPathFixAdvisor : IUiPathAiFixAdvisor
         this.logger = logger;
     }
 
-    public string ProviderName => "OpenAI";
+    public string ProviderName => options.TryResolveProvider(out var configuration)
+        ? configuration.ProviderName
+        : options.Provider.ToString();
 
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(options.ApiKey);
+    public bool IsConfigured => options.TryResolveProvider(out _);
 
     public async Task<UiPathFixSuggestion> SuggestAsync(UiPathAiFixPrompt prompt, CancellationToken cancellationToken)
     {
@@ -45,8 +47,16 @@ public sealed class OpenAiUiPathFixAdvisor : IUiPathAiFixAdvisor
 
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/responses");
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
+            if (!options.TryResolveProvider(out var configuration))
+            {
+                return Failed(Localized(prompt.Locale, "AI-assisted fix suggestions are not configured.", "AI-assisted fix suggestions yapılandırılmamış."));
+            }
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, configuration.Endpoint);
+            if (configuration.ApiKey is not null)
+            {
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", configuration.ApiKey);
+            }
             request.Content = new StringContent(JsonSerializer.Serialize(BuildRequestBody(prompt), JsonOptions), Encoding.UTF8, "application/json");
 
             using var response = await httpClient.SendAsync(request, timeout.Token).ConfigureAwait(false);
@@ -104,7 +114,7 @@ public sealed class OpenAiUiPathFixAdvisor : IUiPathAiFixAdvisor
     {
         return new
         {
-            model = options.Model,
+            model = options.EffectiveModel,
             instructions = prompt.SystemInstructions,
             input = prompt.UserContext,
             max_output_tokens = options.MaxOutputTokens,

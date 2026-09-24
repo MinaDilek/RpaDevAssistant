@@ -33,6 +33,7 @@ public sealed class UiPathRuleCatalog : IUiPathRuleCatalog
             .Select(rule => ToBuiltInDefinition(rule, configurations.GetValueOrDefault(rule.Id)));
 
         var custom = customRuleRepository.GetRules()
+            .Where(rule => !rule.IsTemplate)
             .OrderBy(rule => rule.Id, StringComparer.OrdinalIgnoreCase)
             .Select(ToCustomDefinition);
 
@@ -72,6 +73,10 @@ public sealed class UiPathRuleCatalog : IUiPathRuleCatalog
             SupportsFixSuggestion = fixProviders.Any(provider => provider.SupportedRuleIds.Contains(rule.Id, StringComparer.OrdinalIgnoreCase)),
             SupportsAggregation = string.Equals(rule.Id, "RPA007", StringComparison.OrdinalIgnoreCase),
             Tags = [rule.Category.ToString(), rule.Severity.ToString()],
+            ApplicableProjectTypes = ApplicableProjectTypes(rule.Id),
+            CompatibilityNotesKey = string.Equals(rule.Id, "RPA016", StringComparison.OrdinalIgnoreCase)
+                ? "RuleCatalog.RPA016Compatibility"
+                : "RuleCatalog.AllProjectTypes",
         };
     }
 
@@ -90,9 +95,14 @@ public sealed class UiPathRuleCatalog : IUiPathRuleCatalog
             Scope = rule.Scope,
             EnabledByDefault = rule.Enabled,
             IsBuiltIn = false,
+            IsTemplate = rule.IsTemplate,
+            TemplateId = rule.TemplateId,
+            TemplateSource = rule.TemplateSource,
             SupportsFixSuggestion = false,
             SupportsAggregation = false,
             Tags = ["Custom", rule.Category.ToString()],
+            ApplicableProjectTypes = ["Windows", "Windows-Legacy", "Modern", "Classic"],
+            CompatibilityNotesKey = "RuleCatalog.AllProjectTypes",
             CustomName = CustomText(rule.Name, rule.NameEn, rule.NameTr),
             CustomDescription = CustomText(rule.Description ?? string.Empty, rule.DescriptionEn, rule.DescriptionTr),
             CustomRecommendation = CustomText(rule.Recommendation ?? string.Empty, rule.RecommendationEn, rule.RecommendationTr)
@@ -104,11 +114,18 @@ public sealed class UiPathRuleCatalog : IUiPathRuleCatalog
         return string.Join('\u001f', fallback, en ?? string.Empty, tr ?? string.Empty);
     }
 
+    private static IReadOnlyList<string> ApplicableProjectTypes(string ruleId)
+    {
+        return string.Equals(ruleId, "RPA016", StringComparison.OrdinalIgnoreCase)
+            ? ["Windows", "Modern"]
+            : ["Windows", "Windows-Legacy", "Modern", "Classic"];
+    }
+
     private static UiPathRuleScope InferScope(string ruleId)
     {
         return ruleId switch
         {
-            "RPA006" or "RPA008" or "RPA014" or "RPA024" or "RPA025" => UiPathRuleScope.Workflow,
+            "RPA006" or "RPA008" or "RPA014" or "RPA024" or "RPA025" or "RPA031" or "RPA032" or "RPA033" or "RPA034" or "RPA038" or "RPA039" or "RPA040" or "RPA041" or "RPA042" or "RPA046" or "RPA048" => UiPathRuleScope.Workflow,
             _ => UiPathRuleScope.Activity
         };
     }

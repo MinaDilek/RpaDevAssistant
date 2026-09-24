@@ -14,6 +14,8 @@ public sealed record UiPathProjectAnalysisResult
 
     public required UiPathRuleProfile Profile { get; init; }
 
+    public UiPathAnalysisPerformanceMetrics Performance { get; init; } = new();
+
     public string? ProjectName => ProjectScan.ProjectName;
 
     public string ProjectPath => ProjectScan.ProjectPath;

@@ -41,6 +41,36 @@ public sealed class UiPathFixSuggestionTests
         Assert.NotNull(result.Suggestion);
         Assert.Equal(UiPathFixSuggestionType.NamingChange, result.Suggestion.FixType);
         Assert.Contains("PascalCase", result.Suggestion.SuggestedValue);
+        Assert.Contains(result.Suggestion.PatchPreview!.Notes, note => note.Contains("Main.xaml", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Suggestion.ValidationNotes, note => note.Contains("Invoke Workflow File", StringComparison.OrdinalIgnoreCase));
+        Assert.False(result.Suggestion.CanAutoApply);
+    }
+
+    [Fact]
+    public async Task Rpa025_LargeWorkflow_ReturnsMetricBasedRefactoringPlan()
+    {
+        var project = Project("RPA025");
+        project.ProjectScan.Workflows.Single(workflow => workflow.RelativePath == "Main.xaml").Analysis!.Complexity = new UiPathWorkflowComplexity
+        {
+            WorkflowPath = "Main.xaml",
+            ExecutableActivities = 132,
+            MaxNestingDepth = 14,
+            DecisionCount = 12,
+            LoopCount = 3,
+            ArgumentCount = 11,
+            ComplexityScore = 88,
+            ComplexityLevel = UiPathWorkflowComplexityLevel.VeryHigh
+        };
+
+        var result = await Service(project).SuggestAsync(Request("RPA025"), CancellationToken.None);
+
+        Assert.NotNull(result.Suggestion);
+        Assert.Equal(UiPathFixSuggestionType.WorkflowRefactor, result.Suggestion.FixType);
+        Assert.Equal(UiPathFixConfidence.High, result.Suggestion.Confidence);
+        Assert.Contains("Activities: 132", result.Suggestion.BeforePreview);
+        Assert.Contains(result.Suggestion.Steps, step => step.Contains("deepest", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Suggestion.Steps, step => step.Contains("decision-heavy", StringComparison.OrdinalIgnoreCase));
+        Assert.False(result.Suggestion.CanAutoApply);
     }
 
     [Fact]
@@ -264,7 +294,8 @@ public sealed class UiPathFixSuggestionTests
             new DisplayNameFixSuggestionProvider(),
             new MissingLoggingFixSuggestionProvider(),
             new ExceptionHandlingFixSuggestionProvider(),
-            new InvalidInvokeWorkflowFixSuggestionProvider()
+            new InvalidInvokeWorkflowFixSuggestionProvider(),
+            new ExpandedRuleManualFixSuggestionProvider()
         ];
 
         var graphBuilder = new UiPathWorkflowGraphBuilder();
@@ -312,7 +343,8 @@ public sealed class UiPathFixSuggestionTests
             Activity("Sequence", "Main", "seq-1"),
             Activity("Click", "Click", clickId, ("Target", "btnLogin"), ("Password", "super-secret")),
             Activity("Delay", "Delay", delayId, ("Duration", "00:00:05")),
-            Activity("InvokeWorkflowFile", "Invoke Missing", invokeId, ("WorkflowFileName", "Framework/SetTransactionStatus.xaml"))));
+            Activity("InvokeWorkflowFile", "Invoke Missing", invokeId, ("WorkflowFileName", "Framework/SetTransactionStatus.xaml")),
+            Activity("InvokeWorkflowFile", "Invoke Generic", "invoke-generic", ("WorkflowFileName", "workflow1.xaml"))));
         project.Workflows.Add(Workflow("Framework/SetTransactionState.xaml", Activity("Sequence", "Set Transaction State", "seq-2")));
         project.Workflows.Add(Workflow("workflow1.xaml", Activity("Sequence", "workflow1", "seq-3")));
 

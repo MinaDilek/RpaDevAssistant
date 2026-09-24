@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { App } from './main';
@@ -7,6 +7,8 @@ const analyzeProject = vi.fn();
 const analyzeFlowchartConversion = vi.fn();
 const applyFlowchartConversion = vi.fn();
 const rollbackFlowchartConversion = vi.fn();
+const isTauriDesktop = vi.fn(() => false);
+const getDesktopStartupContext = vi.fn(async () => ({}));
 
 vi.mock('./services/apiClient', () => ({
   analyzeProject: (...args: unknown[]) => analyzeProject(...args),
@@ -28,8 +30,10 @@ vi.mock('./services/apiClient', () => ({
 }));
 
 vi.mock('./services/projectFolderService', () => ({
-  isTauriDesktop: vi.fn(() => false),
+  isTauriDesktop: () => isTauriDesktop(),
   selectProjectFolder: vi.fn(async () => null),
+  getDesktopStartupContext: () => getDesktopStartupContext(),
+  openWorkflowInStudio: vi.fn(async () => undefined),
 }));
 
 vi.mock('./services/reportExportService', () => ({
@@ -38,6 +42,8 @@ vi.mock('./services/reportExportService', () => ({
 
 describe('App workflow detail and localization', () => {
   beforeEach(() => {
+    isTauriDesktop.mockReturnValue(false);
+    getDesktopStartupContext.mockResolvedValue({});
     analyzeProject.mockResolvedValue(analysisResponse());
     analyzeFlowchartConversion.mockResolvedValue(flowchartConversionResponse());
     applyFlowchartConversion.mockResolvedValue({
@@ -64,6 +70,17 @@ describe('App workflow detail and localization', () => {
     });
   });
 
+  it('analyzes the project and opens the workflow supplied by UiPath Studio startup context', async () => {
+    isTauriDesktop.mockReturnValue(true);
+    getDesktopStartupContext.mockResolvedValue({ projectPath: '/tmp/project', workflowPath: 'Main.xaml' });
+
+    render(<App />);
+
+    await waitFor(() => expect(analyzeProject).toHaveBeenCalledWith('/tmp/project', 'default'));
+    await waitFor(() => expect(screen.getByText('Workflow detail')).toBeInTheDocument());
+    expect(screen.getAllByText('Main.xaml').length).toBeGreaterThan(0);
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
   });
@@ -86,6 +103,64 @@ describe('App workflow detail and localization', () => {
     expect(screen.getByText('Click · Click')).toBeInTheDocument();
     expect(screen.getByText('Workflow Findings')).toBeInTheDocument();
     expect(screen.getByText(/Avoid Delay Activities/i)).toBeInTheDocument();
+  });
+
+  it('renders project architecture with static, dynamic, and dangling invocation evidence', async () => {
+    render(<App />);
+    await analyze();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Workflows' }));
+    await userEvent.click(screen.getByText('Project Architecture'));
+
+    const architecture = screen.getByRole('list', { name: 'Project Architecture' });
+    expect(screen.getByText('Project Architecture')).toBeInTheDocument();
+    expect(within(architecture).getAllByText('Framework/Process.xaml').length).toBeGreaterThan(0);
+    expect(within(architecture).getByText('Dynamic workflow reference')).toBeInTheDocument();
+    expect(screen.getByText('6 workflows · 2 static invocations')).toBeInTheDocument();
+
+    await userEvent.click(within(architecture).getAllByRole('button', { name: 'Framework/Process.xaml' })[0]);
+    expect(screen.getByText('Workflow detail')).toBeInTheDocument();
+  });
+
+  it('searches the activity tree while preserving the matching activity hierarchy', async () => {
+    render(<App />);
+    await analyze();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Workflows' }));
+    await userEvent.click(screen.getByText('Main.xaml'));
+
+    const search = screen.getByRole('searchbox', { name: 'Search activity tree' });
+    await userEvent.type(search, 'Invoke Process');
+
+    const activityTree = screen.getByRole('region', { name: 'Activity Tree' });
+    expect(within(activityTree).getByText('1 matching activities')).toBeInTheDocument();
+    expect(within(activityTree).getByText('Sequence · Main')).toBeInTheDocument();
+    expect(within(activityTree).getByText('InvokeWorkflowFile · Invoke Process')).toBeInTheDocument();
+    expect(within(activityTree).queryByText('Click · Click')).not.toBeInTheDocument();
+
+    await userEvent.clear(search);
+    await userEvent.type(search, 'does-not-exist');
+    expect(within(activityTree).getByText('No activities match this search.')).toBeInTheDocument();
+  });
+
+  it('renders the workflow argument contract in English and Turkish', async () => {
+    render(<App />);
+    await analyze();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Workflows' }));
+    await userEvent.click(screen.getByText('Main.xaml'));
+
+    expect(screen.getByText('Workflow Argument Contract')).toBeInTheDocument();
+    expect(screen.getByText('1 arguments')).toBeInTheDocument();
+    const englishSummary = screen.getByLabelText('Argument contract summary');
+    expect(within(englishSummary).getByText('Input')).toBeInTheDocument();
+    expect(screen.getByText('Contract Role')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'EN / TR' }));
+
+    expect(screen.getByText('Workflow Argument Sözleşmesi')).toBeInTheDocument();
+    expect(screen.getByText('Sözleşme Rolü')).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Activity Tree içinde ara' })).toBeInTheDocument();
   });
 
   it('opens workflow detail from the overview complexity summary', async () => {
@@ -287,6 +362,20 @@ describe('App workflow detail and localization', () => {
 
     expect(screen.getAllByText(/Generic activity DisplayName/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Workflow içinde generic activity DisplayName/i)).toBeInTheDocument();
+  });
+
+  it('renders split resize handle and closes drawer with Escape key', async () => {
+    render(<App />);
+    await analyze();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Workflows' }));
+    await userEvent.click(screen.getByText('Main.xaml'));
+
+    expect(screen.getByText('Workflow detail')).toBeInTheDocument();
+    expect(screen.getByRole('separator', { name: 'Resize panel' })).toBeInTheDocument();
+
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByText('Workflow detail')).not.toBeInTheDocument();
   });
 });
 

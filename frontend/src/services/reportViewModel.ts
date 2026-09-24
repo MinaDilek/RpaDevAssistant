@@ -4,6 +4,15 @@ export interface AnalysisResponse {
   projectName?: string | null;
   projectPath?: string;
   compatibility?: string | null;
+  compatibilityBehavior?: {
+    runtime: 'Unknown' | 'Windows' | 'WindowsLegacy' | 'CrossPlatform' | string;
+    designExperience: 'Unknown' | 'Modern' | 'Classic' | 'Mixed' | string;
+    supportsModernActivities: boolean;
+    supportsClassicActivities: boolean;
+    preferModernUiAutomation: boolean;
+    flagLegacyUiActivities: boolean;
+    migrationRecommended: boolean;
+  } | null;
   workflowCount?: number;
   totalActivityCount?: number;
   analysis?: {
@@ -34,6 +43,108 @@ export interface AnalysisResponse {
   projectScan?: {
     workflows?: Workflow[];
   };
+}
+
+export interface ConfigAnalysisResult {
+  projectPath: string;
+  projectName?: string | null;
+  configPath?: string | null;
+  configFound: boolean;
+  canGenerate: boolean;
+  messages?: string[];
+  entries: ConfigEntry[];
+  usages: ConfigUsage[];
+  unusedKeys: UnusedConfigKey[];
+  missingKeys: MissingConfigKey[];
+  hardCodedCandidates: HardCodedConfigCandidate[];
+  environmentComparisons: ConfigEnvironmentComparison[];
+  overview: ConfigAnalysisOverview;
+}
+
+export interface ConfigAnalysisOverview {
+  configKeyCount: number;
+  usedKeyCount: number;
+  unusedKeyCount: number;
+  missingKeyCount: number;
+  hardCodedCandidateCount: number;
+  sensitiveCandidateCount: number;
+  environmentCount: number;
+  environmentIssueCount: number;
+}
+
+export interface ConfigEntry {
+  key: string;
+  value?: string | null;
+  description?: string | null;
+  workbookPath: string;
+  sheetName: string;
+  rowNumber: number;
+  environmentValues?: Record<string, string | null>;
+}
+
+export interface ConfigEnvironmentComparison {
+  key: string;
+  values: Record<string, string | null>;
+  missingEnvironments: string[];
+  hasDifferentValues: boolean;
+  hasIssue: boolean;
+}
+
+export interface ConfigUsage {
+  key: string;
+  workflowPath: string;
+  activityId?: string | null;
+  activityName?: string | null;
+  activityDisplayName?: string | null;
+  propertyName?: string | null;
+}
+
+export interface UnusedConfigKey {
+  entry: ConfigEntry;
+}
+
+export interface MissingConfigKey {
+  key: string;
+  references: ConfigUsage[];
+  suggestedValue?: string;
+  isPreselected?: boolean;
+}
+
+export interface HardCodedConfigCandidate {
+  id: string;
+  type: string;
+  displayValue: string;
+  suggestedKey: string;
+  recommendation: string;
+  isSensitive: boolean;
+  canAddToConfig: boolean;
+  occurrenceCount: number;
+  occurrences: ConfigUsage[];
+}
+
+export interface ConfigChangePreview {
+  projectPath: string;
+  configPath?: string | null;
+  isValid: boolean;
+  validationMessages: string[];
+  changes: ConfigPreviewChange[];
+}
+
+export interface ConfigPreviewChange {
+  changeType: 'Remove' | 'Add' | 'Keep' | string;
+  key: string;
+  beforeValue?: string | null;
+  afterValue?: string | null;
+  sheetName?: string | null;
+  rowNumber?: number | null;
+}
+
+export interface ConfigGenerateResult {
+  success: boolean;
+  generated: boolean;
+  message: string;
+  outputPath?: string | null;
+  preview?: ConfigChangePreview | null;
 }
 
 export interface HistorySeverityCounts {
@@ -112,6 +223,57 @@ export interface AnalysisComparison {
   workflowChanges: WorkflowComparison[];
 }
 
+export interface GitComparisonFinding {
+  id?: string;
+  ruleId: string;
+  ruleName?: string;
+  severity: string;
+  workflowPath?: string | null;
+  message?: string | null;
+}
+
+export interface GitComparisonResult {
+  success: boolean;
+  message: string;
+  repositoryRoot?: string | null;
+  baselineRef?: string | null;
+  baselineCommit?: string | null;
+  targetRef?: string | null;
+  targetCommit?: string | null;
+  baselineScore: number;
+  targetScore: number;
+  scoreDelta: number;
+  baselineFindings: number;
+  targetFindings: number;
+  findingDelta: number;
+  changedFiles: string[];
+  newFindings: GitComparisonFinding[];
+  resolvedFindings: GitComparisonFinding[];
+  changedFindings: Array<{ before: GitComparisonFinding; after: GitComparisonFinding }>;
+}
+
+export interface OrchestratorSummary {
+  configured: boolean;
+  success: boolean;
+  message: string;
+  deploymentType?: string | null;
+  processes: Array<{ id?: number | null; name: string; processKey?: string | null; version?: string | null; isLatestVersion?: boolean | null }>;
+  queues: Array<{ id?: number | null; name: string; description?: string | null; maxRetries?: number | null }>;
+  assets: Array<{ id?: number | null; name: string; valueScope?: string | null; valueType?: string | null }>;
+  machines: Array<{ id?: number | null; name: string; type?: string | null }>;
+  errorCode?: string | null;
+}
+
+export interface PullRequestReviewResult {
+  success: boolean;
+  message: string;
+  provider: 'GitHub' | 'GitLab' | 'AzureDevOps' | string;
+  repository: string;
+  pullRequestId: number;
+  pullRequest?: { title: string; baseCommit: string; headCommit: string; webUrl?: string | null } | null;
+  comparison?: GitComparisonResult | null;
+}
+
 export interface WorkflowComplexitySummary {
   totalWorkflowCount: number;
   lowCount: number;
@@ -163,6 +325,18 @@ export interface FlowchartWorkflowSummary {
   reasons?: string[];
 }
 
+export interface CustomActivityDetection {
+  nodeId: string;
+  activityName: string;
+  displayName?: string | null;
+  customNamespace?: string | null;
+  customPackageFamily?: string | null;
+  suggestedUiPathActivity: string;
+  suggestedPackage: string;
+  replacementReason?: string | null;
+  canAutoReplace?: boolean;
+}
+
 export interface FlowchartConversionResult {
   workflowPath: string;
   structureType: string;
@@ -199,6 +373,7 @@ export interface FlowchartConversionResult {
     warnings: string[];
     manualReviewItems: string[];
     preservedItems: string[];
+    customActivityDetections?: CustomActivityDetection[];
   } | null;
   errors?: string[];
   workflowHash?: string | null;
@@ -251,6 +426,7 @@ export interface StandaloneFlowchartAnalysisResult extends FlowchartConversionRe
   suggestedOutputFileName?: string;
   messages?: string[];
   canConvert?: boolean;
+  customActivityDetections?: CustomActivityDetection[];
 }
 
 export interface StandaloneFlowchartConvertResult {
@@ -322,12 +498,17 @@ export interface RuleCatalogItem {
   enabledByDefault?: boolean;
   isBuiltIn?: boolean;
   isCustom?: boolean;
+  isTemplate?: boolean;
+  templateId?: string | null;
+  templateSource?: string | null;
   hasFixSuggestion?: boolean;
   canAutoApply?: boolean;
   supportsAggregation?: boolean;
   defaultWeight?: number;
   defaultMaxPenalty?: number;
   tags?: string[];
+  applicableProjectTypes?: string[];
+  compatibilityNotes?: string | null;
 }
 
 export interface CustomRuleCondition {
@@ -354,6 +535,11 @@ export interface CustomRuleDefinition {
   severity: string;
   scope: 'Activity' | 'Workflow' | 'Project' | string;
   enabled: boolean;
+  isTemplate?: boolean;
+  templateId?: string | null;
+  templateSource?: string | null;
+  createdAtUtc?: string | null;
+  updatedAtUtc?: string | null;
   weight: number;
   maxPenalty: number;
   matchMode: 'All' | 'Any' | string;
@@ -367,6 +553,15 @@ export interface RuleConfiguration {
   weight: number;
   maxPenalty: number;
   description?: string | null;
+  namingConvention?: RuleNamingConvention | null;
+}
+
+export interface RuleNamingConvention {
+  pattern?: string | null;
+  requiredPrefix?: string | null;
+  inPrefix?: string | null;
+  outPrefix?: string | null;
+  inOutPrefix?: string | null;
 }
 
 export interface RuleProfile {
@@ -466,7 +661,67 @@ export interface ProjectEvidence {
   relevanceScore?: number;
 }
 
+export interface ProcessPddAnalysisResult {
+  projectName: string;
+  projectPath: string;
+  pddFileName: string;
+  locale: string;
+  workflowCount: number;
+  processSummary: string;
+  processFlow: ProcessFlowStep[];
+  omittedProcessFlowCount: number;
+  systems: ProcessSystem[];
+  projectBusinessRules: BusinessRuleCandidate[];
+  pddBusinessRules: PddBusinessRule[];
+  gapAnalysis: BusinessRuleComparison[];
+}
+
+export interface ProcessFlowStep {
+  order: number;
+  title: string;
+  workflowPath?: string | null;
+  evidence?: string | null;
+}
+
+export interface ProcessSystem {
+  name: string;
+  type: string;
+  evidence: string;
+  workflowPaths: string[];
+}
+
+export interface BusinessRuleCandidate {
+  id: string;
+  title: string;
+  description: string;
+  workflowPath: string;
+  activity: string;
+  condition: string;
+  outcome?: string | null;
+  evidence: string;
+  confidence: 'High' | 'Medium' | 'Low' | string;
+}
+
+export interface PddBusinessRule {
+  id: string;
+  title: string;
+  description: string;
+  sourceReference: string;
+  sourceSnippet: string;
+}
+
+export interface BusinessRuleComparison {
+  projectRule: BusinessRuleCandidate;
+  status: 'Documented' | 'PossiblyDocumented' | 'PossiblyMissing' | 'NeedsReview' | string;
+  matchedPddRuleId?: string | null;
+  matchedPddRule?: PddBusinessRule | null;
+  reason: string;
+  suggestedPddAddition?: string | null;
+  confidence: 'High' | 'Medium' | 'Low' | string;
+}
+
 export interface Finding {
+  id?: string;
   ruleId: string;
   ruleName: string;
   severity: string;
@@ -573,6 +828,31 @@ export interface FixApplyResult {
   appliedAtUtc?: string | null;
   errorCode?: string | null;
   requiresReanalysis?: boolean;
+}
+
+export interface BulkFixApplyResult {
+  success: boolean;
+  eligibleCount: number;
+  appliedCount: number;
+  skippedCount: number;
+  requiresReanalysis: boolean;
+  message: string;
+  results: FixApplyResult[];
+}
+
+export interface WorkflowRenameResult {
+  success: boolean;
+  renamed: boolean;
+  message: string;
+  previousWorkflowPath?: string | null;
+  newWorkflowPath?: string | null;
+  updatedCallerWorkflows: string[];
+  dynamicReferencesRequiringReview: string[];
+  backupId?: string | null;
+  backupPath?: string | null;
+  errorCode?: string | null;
+  rolledBack: boolean;
+  requiresReanalysis: boolean;
 }
 
 export interface BackupSummary {
@@ -693,10 +973,17 @@ export function getTopIssues(findings: Finding[], count = 5): Finding[] {
 export function getWorkflowHealth(analysis: AnalysisResponse): Array<{ relativePath: string; findingCount: number; activityCount: number; complexity?: WorkflowComplexity | null; workflow: Workflow }> {
   const findings = analysis.analysis?.findings ?? [];
   const workflows = analysis.workflows ?? analysis.projectScan?.workflows ?? [];
+  const findingCountsByWorkflow = findings.reduce((counts, finding) => {
+    if (finding.workflowPath) {
+      counts.set(finding.workflowPath, (counts.get(finding.workflowPath) ?? 0) + 1);
+    }
+    return counts;
+  }, new Map<string, number>());
+
   return workflows
     .map((workflow) => ({
       relativePath: workflow.relativePath,
-      findingCount: findings.filter((finding) => finding.workflowPath === workflow.relativePath).length,
+      findingCount: findingCountsByWorkflow.get(workflow.relativePath) ?? 0,
       activityCount: workflow.activityCount ?? workflow.analysis?.activityCount ?? 0,
       complexity: workflow.complexity,
       workflow,

@@ -2,6 +2,9 @@ namespace RpaDevAssistant.Core.Reporting;
 
 using RpaDevAssistant.Core.Dependencies;
 using RpaDevAssistant.Core.Flowcharts;
+using RpaDevAssistant.Core.Ai;
+using RpaDevAssistant.Core.Fixes;
+using RpaDevAssistant.Core.History;
 
 public sealed record UiPathAnalysisReport
 {
@@ -50,4 +53,14 @@ public sealed record UiPathAnalysisReport
     public UiPathDependencySummary? DependencyAnalysis { get; init; }
 
     public UiPathFlowchartAnalysisSummary? FlowchartAnalysis { get; init; }
+
+    public UiPathAnalysisComparison? Comparison { get; init; }
+
+    public UiPathAiReviewResult? AiReview { get; init; }
+
+    public UiPathFixSuggestionsBulkResult? FixSuggestions { get; init; }
+
+    public UiPathReportBranding? Branding { get; init; }
+
+    public UiPathReportCompliance? Compliance { get; init; }
 }

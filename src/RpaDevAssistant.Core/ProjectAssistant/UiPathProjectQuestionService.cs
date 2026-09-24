@@ -89,14 +89,30 @@ public sealed class UiPathProjectQuestionService : IUiPathProjectQuestionService
         {
             var prompt = promptBuilder.Build(request, analysis, evidence);
             var aiAnswer = await aiProvider.AnswerAsync(prompt, cancellationToken).ConfigureAwait(false);
-            return aiAnswer with
+            if (!UiPathProjectAnswerResponseMapper.TryMap(aiAnswer, evidence, out var mappedAnswer))
             {
-                Evidence = evidence,
-                RelatedWorkflows = Merge(aiAnswer.RelatedWorkflows, RelatedWorkflows(evidence)),
-                RelatedActivities = Merge(aiAnswer.RelatedActivities, RelatedActivities(evidence)),
-                RelatedRuleIds = Merge(aiAnswer.RelatedRuleIds, RelatedRuleIds(evidence)),
+                logger.LogWarning("Project assistant returned an invalid structured response. Provider={Provider}", aiProvider.ProviderName);
+                return new UiPathProjectAnswer
+                {
+                    Answer = localizer.Get("Ask.AiFailed.Answer", request.Locale),
+                    AnswerType = UiPathProjectAnswerType.InsufficientEvidence,
+                    Confidence = UiPathProjectAnswerConfidence.Low,
+                    Evidence = evidence,
+                    RelatedWorkflows = RelatedWorkflows(evidence),
+                    RelatedActivities = RelatedActivities(evidence),
+                    RelatedRuleIds = RelatedRuleIds(evidence),
+                    UsedAi = false,
+                    ErrorMessage = localizer.Get("Ask.AiFailed.Error", request.Locale)
+                };
+            }
+
+            return mappedAnswer with
+            {
+                RelatedWorkflows = Merge(mappedAnswer.RelatedWorkflows, RelatedWorkflows(evidence)),
+                RelatedActivities = Merge(mappedAnswer.RelatedActivities, RelatedActivities(evidence)),
+                RelatedRuleIds = Merge(mappedAnswer.RelatedRuleIds, RelatedRuleIds(evidence)),
                 UsedAi = true,
-                GeneratedAtUtc = aiAnswer.GeneratedAtUtc == default ? DateTimeOffset.UtcNow : aiAnswer.GeneratedAtUtc
+                GeneratedAtUtc = mappedAnswer.GeneratedAtUtc == default ? DateTimeOffset.UtcNow : mappedAnswer.GeneratedAtUtc
             };
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -934,6 +950,7 @@ public sealed class UiPathProjectQuestionService : IUiPathProjectQuestionService
         return new UiPathProjectAnswer
         {
             Answer = answer,
+            Interpretation = answer,
             AnswerType = type,
             Confidence = UiPathProjectAnswerConfidence.High,
             Evidence = evidence,

@@ -28,10 +28,22 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "icon": ["icons/icon.png", "icons/icon.ico"],
     "externalBin": ["bin/RpaDevAssistant.Api"],
     "windows": {
       "nsis": {
         "displayLanguageSelector": false
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU3MDZCMTA2RkQ2N0JBM0YKUldRL3VtZjlCckVHVjRDSVNqeWg1WU9RaHhpUmZOUHdSZHV3RkhZdGRZdkNMVi8zSUQvQ2ZIZTEK",
+      "endpoints": [
+        "https://github.com/MinaDilek/RpaDevAssistant/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

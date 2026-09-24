@@ -32,9 +32,11 @@ public sealed class OpenAiUiPathReviewProvider : IUiPathAiReviewProvider
         this.logger = logger;
     }
 
-    public string ProviderName => "OpenAI";
+    public string ProviderName => options.TryResolveProvider(out var configuration)
+        ? configuration.ProviderName
+        : options.Provider.ToString();
 
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(options.ApiKey);
+    public bool IsConfigured => options.TryResolveProvider(out _);
 
     public async Task<UiPathAiReviewResult> ReviewAsync(UiPathAiPrompt prompt, CancellationToken cancellationToken)
     {
@@ -75,8 +77,16 @@ public sealed class OpenAiUiPathReviewProvider : IUiPathAiReviewProvider
 
     private async Task<UiPathAiReviewResult> SendReviewRequestAsync(UiPathAiPrompt prompt, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/responses");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
+        if (!options.TryResolveProvider(out var configuration))
+        {
+            return UiPathAiReviewResult.NotConfigured(prompt.Scope, prompt.WorkflowPath, prompt.Locale);
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, configuration.Endpoint);
+        if (configuration.ApiKey is not null)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", configuration.ApiKey);
+        }
         request.Content = new StringContent(JsonSerializer.Serialize(BuildRequestBody(prompt), JsonOptions), Encoding.UTF8, "application/json");
 
         using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
@@ -140,7 +150,7 @@ public sealed class OpenAiUiPathReviewProvider : IUiPathAiReviewProvider
     {
         return new
         {
-            model = options.Model,
+            model = options.EffectiveModel,
             instructions = prompt.SystemInstructions,
             input = prompt.UserContext,
             max_output_tokens = options.MaxOutputTokens,

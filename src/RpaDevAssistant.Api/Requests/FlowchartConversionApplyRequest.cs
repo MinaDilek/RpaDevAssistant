@@ -11,6 +11,8 @@ public sealed record FlowchartConversionApplyRequest
     public bool Confirmed { get; init; }
 
     public bool CreateBackup { get; init; } = true;
+
+    public bool ReplaceCustomActivitiesWithUiPathStandard { get; init; }
 }
 
 public sealed record FlowchartConversionRollbackRequest

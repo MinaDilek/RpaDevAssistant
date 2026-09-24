@@ -4,6 +4,8 @@ using RpaDevAssistant.Core.Dependencies;
 using RpaDevAssistant.Core.Flowcharts;
 using RpaDevAssistant.Core.History;
 using RpaDevAssistant.Core.Localization;
+using RpaDevAssistant.Core.Compatibility;
+using RpaDevAssistant.Core.Models;
 
 namespace RpaDevAssistant.Api.Responses;
 
@@ -15,9 +17,17 @@ public sealed record AnalyzeUiPathProjectResponse
 
     public string ProjectPath { get; init; } = string.Empty;
 
+    public string? Compatibility { get; init; }
+
+    public UiPathCompatibilityBehavior? CompatibilityBehavior { get; init; }
+
     public int WorkflowCount { get; init; }
 
     public int TotalActivityCount { get; init; }
+
+    public bool IsReFramework { get; init; }
+
+    public UiPathReFrameworkAssessment? ReFrameworkAssessment { get; init; }
 
     public UiPathStaticAnalysisResult Analysis { get; init; } = new();
 
@@ -41,6 +51,8 @@ public sealed record AnalyzeUiPathProjectResponse
 
     public string Locale { get; init; } = "en";
 
+    public UiPathAnalysisPerformanceMetrics Performance { get; init; } = new();
+
     public static AnalyzeUiPathProjectResponse From(
         UiPathProjectAnalysisResult result,
         UiPathAnalysisFindingLocalizer? findingLocalizer = null,
@@ -55,8 +67,12 @@ public sealed record AnalyzeUiPathProjectResponse
             IsValid = result.ProjectScan.IsValid,
             ProjectName = result.ProjectName,
             ProjectPath = result.ProjectPath,
+            Compatibility = result.ProjectScan.Compatibility,
+            CompatibilityBehavior = result.ProjectScan.CompatibilityBehavior,
             WorkflowCount = result.WorkflowCount,
             TotalActivityCount = result.TotalActivityCount,
+            IsReFramework = result.ProjectScan.IsReFramework,
+            ReFrameworkAssessment = result.ProjectScan.ReFrameworkAssessment,
             Analysis = analysis,
             QualityScore = result.QualityScore,
             DependencyAnalysis = result.ProjectScan.DependencyAnalysis,
@@ -82,7 +98,8 @@ public sealed record AnalyzeUiPathProjectResponse
             Workflows = result.ProjectScan.Workflows.Select(AnalyzeWorkflowSummaryResponse.From).ToArray(),
             Errors = result.ProjectScan.Errors,
             Warnings = result.ProjectScan.Warnings,
-            Locale = responseLocale
+            Locale = responseLocale,
+            Performance = result.Performance
         };
     }
 }

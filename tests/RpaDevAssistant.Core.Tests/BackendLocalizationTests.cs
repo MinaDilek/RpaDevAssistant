@@ -98,12 +98,12 @@ public sealed class BackendLocalizationTests
     }
 
     [Fact]
-    public void Rpa001ToRpa025_HaveRequiredTranslationsForBothLocales()
+    public void BuiltInRules_HaveRequiredTranslationsForBothLocales()
     {
         var localizer = new RpaDevAssistantLocalizer();
         foreach (var locale in new[] { "en", "tr" })
         {
-            for (var index = 1; index <= 25; index++)
+            for (var index = 1; index <= 46; index++)
             {
                 var ruleId = $"RPA{index:000}";
                 Assert.False(string.IsNullOrWhiteSpace(localizer.Get($"Rules.{ruleId}.Name", locale)));

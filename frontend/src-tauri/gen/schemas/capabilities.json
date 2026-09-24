@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Minimal permissions for local project selection and backend sidecar startup.","local":true,"windows":["main"],"permissions":["core:default","dialog:allow-open","shell:allow-spawn","shell:allow-kill"]}}
+{"default":{"identifier":"default","description":"Minimal permissions for local project selection and backend sidecar startup.","local":true,"windows":["main"],"permissions":["core:default","dialog:allow-open","dialog:allow-save","process:allow-restart","shell:allow-spawn","shell:allow-kill","updater:default"]}}

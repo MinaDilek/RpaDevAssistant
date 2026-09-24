@@ -24,6 +24,36 @@ public sealed class RealUiPathProjectApiSmokeTests
     }
 
     [Fact]
+    public async Task ConfigAnalysis_DoesNotRejectExplicitWorkbookOutsideProjectBoundary()
+    {
+        using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        using var copy = FixtureCopy();
+        var externalDirectory = Path.Combine(Path.GetTempPath(), $"RpaDevAssistantExternalConfig-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(externalDirectory);
+        var externalConfigPath = Path.Combine(externalDirectory, "SelectedConfig.xlsx");
+        File.Copy(Path.Combine(copy.RootPath, "Data", "Config.xlsx"), externalConfigPath);
+
+        try
+        {
+            var response = await client.PostAsJsonAsync("/api/uipath/projects/config/analyze", new
+            {
+                projectPath = copy.RootPath,
+                configPath = externalConfigPath
+            });
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.True(json.RootElement.TryGetProperty("configFound", out _));
+            Assert.DoesNotContain("escapes project boundary", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(externalDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task RealisticValidationProject_CoreEndpoints_ReturnSuccessfulResponses()
     {
         using var factory = new WebApplicationFactory<Program>();
@@ -44,6 +74,17 @@ public sealed class RealUiPathProjectApiSmokeTests
 
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/uipath/rules")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/uipath/rule-profiles")).StatusCode);
+
+        var configResponse = await client.PostAsJsonAsync("/api/uipath/projects/config/analyze", new
+        {
+            projectPath = copy.RootPath
+        });
+        Assert.Equal(HttpStatusCode.OK, configResponse.StatusCode);
+        using (var configJson = JsonDocument.Parse(await configResponse.Content.ReadAsStringAsync()))
+        {
+            Assert.True(configJson.RootElement.TryGetProperty("configFound", out _));
+        }
+
 
         var askResponse = await client.PostAsJsonAsync("/api/uipath/projects/ask", new
         {

@@ -6,7 +6,10 @@
   "permissions": [
     "core:default",
     "dialog:allow-open",
+    "dialog:allow-save",
+    "process:allow-restart",
     "shell:allow-spawn",
-    "shell:allow-kill"
+    "shell:allow-kill",
+    "updater:default"
   ]
 }

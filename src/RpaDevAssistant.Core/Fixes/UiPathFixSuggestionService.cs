@@ -121,17 +121,25 @@ public sealed class UiPathFixSuggestionService : IUiPathFixSuggestionService
                 continue;
             }
 
-            var context = contextBuilder.Build(analysis, finding, request.Locale);
-            var suggestion = provider.Suggest(context);
-            if (suggestion is null)
+            foreach (var candidateFinding in ExpandBulkCandidates(finding))
             {
-                continue;
-            }
+                var context = contextBuilder.Build(analysis, candidateFinding, request.Locale);
+                var suggestion = provider.Suggest(context);
+                if (suggestion is null)
+                {
+                    continue;
+                }
 
-            var validation = validator.Validate(context, suggestion);
-            if (validation.IsValid)
-            {
-                suggestions.Add(suggestionLocalizer.Localize(suggestion, request.Locale));
+                var validation = validator.Validate(context, suggestion);
+                if (validation.IsValid)
+                {
+                    suggestions.Add(suggestionLocalizer.Localize(suggestion, request.Locale));
+                }
+
+                if (suggestions.Count >= max)
+                {
+                    break;
+                }
             }
 
             if (suggestions.Count >= max)
@@ -146,6 +154,34 @@ public sealed class UiPathFixSuggestionService : IUiPathFixSuggestionService
             FixableFindings = suggestions.Count,
             Suggestions = suggestions
         });
+    }
+
+    private static IEnumerable<UiPathAnalysisFinding> ExpandBulkCandidates(UiPathAnalysisFinding finding)
+    {
+        if (finding.Scope != UiPathFindingScope.Aggregated || finding.AffectedActivities.Count == 0)
+        {
+            yield return finding;
+            yield break;
+        }
+
+        foreach (var affected in finding.AffectedActivities)
+        {
+            yield return finding with
+            {
+                Scope = UiPathFindingScope.Activity,
+                ActivityId = affected.ActivityId,
+                ActivityName = affected.ActivityName,
+                ActivityDisplayName = affected.ActivityDisplayName,
+                PropertyName = affected.PropertyName ?? finding.PropertyName,
+                CurrentValue = affected.CurrentValue ?? finding.CurrentValue,
+                OccurrenceCount = 1,
+                AffectedActivityCount = null,
+                TotalRelevantActivityCount = null,
+                Percentage = null,
+                ExampleActivities = [],
+                AffectedActivities = []
+            };
+        }
     }
 
     private static UiPathAnalysisFinding? FindFinding(IEnumerable<UiPathAnalysisFinding> findings, UiPathFixSuggestionRequest request)

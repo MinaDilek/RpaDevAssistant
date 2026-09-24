@@ -43,14 +43,55 @@ public sealed class UiPathAnalysisReportBuilder : IUiPathAnalysisReportBuilder
             ProfileName = profile.Name,
             QualityScore = qualityScore.Score,
             Grade = qualityScore.Grade,
-            Summary = BuildSummary(projectScan, analysis),
+            Summary = BuildSummary(projectScan, analysis, qualityScore),
             Findings = orderedFindings,
             WorkflowSummaries = BuildWorkflowSummaries(projectScan, analysis),
             ScoreBreakdown = qualityScore.ScoreBreakdown.Select(MapScoreBreakdown).ToArray(),
             ComplexityDistribution = BuildComplexityDistribution(projectScan),
             TopComplexWorkflows = projectScan.TopComplexWorkflows.Select(MapWorkflowComplexity).ToArray(),
             DependencyAnalysis = projectScan.DependencyAnalysis,
-            FlowchartAnalysis = projectScan.FlowchartAnalysis
+            FlowchartAnalysis = projectScan.FlowchartAnalysis,
+            Compliance = BuildCompliance(profile, analysis)
+        };
+    }
+
+    private static UiPathReportCompliance BuildCompliance(UiPathRuleProfile profile, UiPathStaticAnalysisResult analysis)
+    {
+        var enabledRules = profile.Rules.Where(rule => rule.Enabled).ToArray();
+        var findingsByRule = analysis.Findings
+            .GroupBy(finding => finding.RuleId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
+        var violations = enabledRules
+            .Where(rule => findingsByRule.ContainsKey(rule.RuleId))
+            .Select(rule =>
+            {
+                var findings = findingsByRule[rule.RuleId];
+                return new UiPathReportComplianceViolation
+                {
+                    RuleId = rule.RuleId,
+                    RuleName = findings[0].RuleName,
+                    Source = findings[0].Source,
+                    Severity = findings.MinBy(finding => GetSeveritySortOrder(finding.Severity))!.Severity,
+                    FindingCount = findings.Length,
+                    OccurrenceCount = findings.Sum(finding => Math.Max(1, finding.OccurrenceCount))
+                };
+            })
+            .OrderBy(violation => GetSeveritySortOrder(violation.Severity))
+            .ThenBy(violation => violation.RuleId, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var compliantRuleCount = Math.Max(0, enabledRules.Length - violations.Length);
+
+        return new UiPathReportCompliance
+        {
+            StandardId = profile.Id,
+            StandardName = profile.Name,
+            EvaluatedRuleCount = enabledRules.Length,
+            CompliantRuleCount = compliantRuleCount,
+            NonCompliantRuleCount = violations.Length,
+            CompliancePercentage = enabledRules.Length == 0
+                ? 100
+                : Math.Round(compliantRuleCount * 100d / enabledRules.Length, 2),
+            Violations = violations
         };
     }
 
@@ -67,7 +108,7 @@ public sealed class UiPathAnalysisReportBuilder : IUiPathAnalysisReportBuilder
         };
     }
 
-    private static UiPathReportSummary BuildSummary(ProjectScanResult projectScan, UiPathStaticAnalysisResult analysis)
+    private static UiPathReportSummary BuildSummary(ProjectScanResult projectScan, UiPathStaticAnalysisResult analysis, UiPathQualityScore qualityScore)
     {
         var workflowsWithFindings = analysis.Findings
             .Where(finding => !string.IsNullOrWhiteSpace(finding.WorkflowPath))
@@ -77,6 +118,7 @@ public sealed class UiPathAnalysisReportBuilder : IUiPathAnalysisReportBuilder
 
         return new UiPathReportSummary
         {
+            ExecutiveSummary = BuildExecutiveSummary(analysis, qualityScore, workflowsWithFindings),
             TotalFindings = analysis.TotalFindings,
             CriticalCount = analysis.CriticalCount,
             ErrorCount = analysis.ErrorCount,
@@ -87,6 +129,50 @@ public sealed class UiPathAnalysisReportBuilder : IUiPathAnalysisReportBuilder
             CleanWorkflows = Math.Max(0, projectScan.WorkflowCount - workflowsWithFindings),
             TopCategories = BuildTopCounts(analysis.Findings.Select(finding => finding.Category.ToString())),
             TopRules = BuildTopCounts(analysis.Findings.Select(finding => $"{finding.RuleId} {finding.RuleName}"))
+        };
+    }
+
+    private static UiPathExecutiveSummary BuildExecutiveSummary(
+        UiPathStaticAnalysisResult analysis,
+        UiPathQualityScore qualityScore,
+        int workflowsWithFindings)
+    {
+        var workflowFindingCounts = analysis.Findings
+            .Where(finding => !string.IsNullOrWhiteSpace(finding.WorkflowPath))
+            .GroupBy(finding => finding.WorkflowPath!, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new { Workflow = group.Key, Count = group.Count() })
+            .OrderByDescending(item => item.Count)
+            .ThenBy(item => item.Workflow, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var mostAffected = workflowFindingCounts.FirstOrDefault();
+        var riskLevel = analysis.CriticalCount > 0 || analysis.ErrorCount > 0 || qualityScore.Score < 70
+            ? "High"
+            : analysis.WarningCount > 0 || qualityScore.Score < 90
+                ? "Medium"
+                : "Low";
+        var priorityRules = analysis.Findings
+            .GroupBy(finding => finding.RuleId, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new
+            {
+                RuleId = group.Key,
+                SeverityOrder = group.Min(finding => GetSeveritySortOrder(finding.Severity)),
+                Count = group.Count()
+            })
+            .OrderBy(item => item.SeverityOrder)
+            .ThenByDescending(item => item.Count)
+            .ThenBy(item => item.RuleId, StringComparer.OrdinalIgnoreCase)
+            .Take(3)
+            .Select(item => item.RuleId)
+            .ToArray();
+
+        return new UiPathExecutiveSummary
+        {
+            RiskLevel = riskLevel,
+            CriticalAndErrorFindings = analysis.CriticalCount + analysis.ErrorCount,
+            WorkflowsRequiringAttention = workflowsWithFindings,
+            MostAffectedWorkflow = mostAffected?.Workflow,
+            MostAffectedWorkflowFindingCount = mostAffected?.Count ?? 0,
+            PriorityRuleIds = priorityRules
         };
     }
 

@@ -233,6 +233,67 @@ public sealed class UiPathProjectQuestionServiceTests
 
         Assert.Contains("RPA003", provider.LastPrompt?.UserContext);
         Assert.Contains("Relevant Evidence", provider.LastPrompt?.UserContext);
+        Assert.Contains("interpretation", provider.LastPrompt?.UserContext, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("Main.xaml", "RPA003", true)]
+    [InlineData("Missing.xaml", "RPA003", false)]
+    [InlineData("Main.xaml", "RPA999", false)]
+    public void AiAnswerContract_ValidatesReferencesAgainstTrustedEvidence(string workflow, string ruleId, bool expectedValid)
+    {
+        var evidence = new[]
+        {
+            new UiPathProjectEvidence
+            {
+                Type = UiPathProjectEvidenceType.Finding,
+                WorkflowPath = "Main.xaml",
+                RuleId = "RPA003",
+                Description = "Catch block has no handling."
+            }
+        };
+        var response = new UiPathProjectAnswer
+        {
+            Answer = "The finding indicates an exception handling risk.",
+            Interpretation = "Add explicit handling after reviewing business behavior.",
+            AnswerType = UiPathProjectAnswerType.Analytical,
+            Confidence = UiPathProjectAnswerConfidence.Medium,
+            RelatedWorkflows = [workflow],
+            RelatedRuleIds = [ruleId],
+            UsedAi = true
+        };
+
+        var valid = UiPathProjectAnswerResponseMapper.TryMap(response, evidence, out var mapped);
+
+        Assert.Equal(expectedValid, valid);
+        if (expectedValid)
+        {
+            Assert.Same(evidence, mapped.Evidence);
+            Assert.NotEqual(mapped.Evidence[0].Description, mapped.Interpretation);
+        }
+    }
+
+    [Fact]
+    public async Task AnalyticalQuestion_InventedReferenceReturnsSafeEvidenceFallback()
+    {
+        var provider = new FakeAssistantProvider
+        {
+            IsConfiguredValue = true,
+            Answer = new UiPathProjectAnswer
+            {
+                Answer = "Missing.xaml is risky.",
+                AnswerType = UiPathProjectAnswerType.Analytical,
+                Confidence = UiPathProjectAnswerConfidence.High,
+                RelatedWorkflows = ["Missing.xaml"],
+                UsedAi = true
+            }
+        };
+
+        var answer = await Service(provider).AskAsync(Question("Exception handling tasarımı nasıl?"), CancellationToken.None);
+
+        Assert.False(answer.UsedAi);
+        Assert.Equal(UiPathProjectAnswerType.InsufficientEvidence, answer.AnswerType);
+        Assert.NotEmpty(answer.Evidence);
     }
 
     [Fact]
@@ -551,8 +612,7 @@ public sealed class UiPathProjectQuestionServiceTests
             Answer = "AI answer from evidence.",
             AnswerType = UiPathProjectAnswerType.Analytical,
             Confidence = UiPathProjectAnswerConfidence.Medium,
-            UsedAi = true,
-            RelatedRuleIds = ["RPA003"]
+            UsedAi = true
         };
 
         public string ProviderName => "Fake";

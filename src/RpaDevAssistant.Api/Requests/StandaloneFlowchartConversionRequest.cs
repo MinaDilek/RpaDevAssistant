@@ -14,4 +14,6 @@ public sealed record StandaloneFlowchartConvertRequest
     public string? ExpectedWorkflowHash { get; init; }
 
     public bool Confirmed { get; init; }
+
+    public bool ReplaceCustomActivitiesWithUiPathStandard { get; init; }
 }

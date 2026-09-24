@@ -19,6 +19,12 @@ frontend/dist/
 frontend/src-tauri/target/
 frontend/src-tauri/bin/RpaDevAssistant.Api-*
 artifacts/
+output/
+tmp/
+.local/
+**/.local/
+/Library/
+/tests/RPA_Dev_Assistant_Product_Backlog.md
 *.tsbuildinfo
 frontend/*.js
 frontend/*.d.ts

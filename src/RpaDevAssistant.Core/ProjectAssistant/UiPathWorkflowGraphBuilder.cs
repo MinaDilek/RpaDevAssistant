@@ -51,7 +51,7 @@ public sealed class UiPathWorkflowGraphBuilder : IUiPathWorkflowGraphBuilder
             .TrimStart('/');
     }
 
-    private static bool IsDynamicReference(string value)
+    public static bool IsDynamicReference(string value)
     {
         var trimmedValue = value.Trim();
         return trimmedValue.StartsWith("[", StringComparison.Ordinal)

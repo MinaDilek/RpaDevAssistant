@@ -14,7 +14,8 @@ public interface IUiPathFlowchartConversionApplyService
         string projectPath,
         string workflowPath,
         UiPathFlowchartGraph graph,
-        UiPathWorkflowStructureType expectedRootStructure = UiPathWorkflowStructureType.Sequence);
+        UiPathWorkflowStructureType expectedRootStructure = UiPathWorkflowStructureType.Sequence,
+        bool replaceCustomActivities = false);
 }
 
 public sealed record UiPathFlowchartGeneratedContent(string? Content, RpaDevAssistant.Core.Fixes.Apply.UiPathFixApplyValidationResult Validation, IReadOnlyList<string> Warnings);
@@ -30,6 +31,8 @@ public sealed record UiPathFlowchartConversionApplyRequest
     public bool Confirmed { get; init; }
 
     public bool CreateBackup { get; init; } = true;
+
+    public bool ReplaceCustomActivitiesWithUiPathStandard { get; init; }
 }
 
 public sealed record UiPathFlowchartConversionRollbackRequest
