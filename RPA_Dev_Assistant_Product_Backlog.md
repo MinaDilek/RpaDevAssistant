@@ -254,7 +254,7 @@ Kurallar:
 - [ ] Code signing
 - [x] Windows installer — Windows 2022 CI üzerinde 510 backend ve 126 frontend testinden sonra NSIS installer üretimi, sessiz kurulum, desktop executable ve bundled .NET sidecar doğrulaması tamamlandı (`Windows Desktop Release` run `35317709978`); indirilen 0.1.0 x64 installer SHA-256 değeri `8c238af8725ce4502f1230f0be73360c80f664f1445dc71d03c3075eabfa0999`.
 - [x] macOS desteği — macOS üzerinde Tauri desktop uygulaması, backend sidecar ve dev ortamı çalışır durumda doğrulandı.
-- [ ] Linux desteği — Kısmi: `linux-x64` self-contained sidecar, Tauri `deb`/`AppImage` build komutu ve Ubuntu 22.04 validation/artifact workflow’u hazır; gerçek Linux runner artifact’i başarıyla üretilmeden tamamlandı sayılmayacak.
+- [x] Linux desteği — Ubuntu 22.04 GitHub Actions run `36051909068` üzerinde backend/frontend doğrulaması, `linux-x64` self-contained sidecar ve Tauri `.deb`/`.AppImage` paket üretimi başarıyla tamamlandı. Doğrulanan 0.1.0 paket SHA-256 değerleri: `.deb` `48fc63a1dc211fe653a2137851ff3843a6c90ee7f3ea75eb599f24d4944ff251`, AppImage `e124898d8738225f9d3dd7e6d21ae7da315c19b81d2ad1ade223c6325a4c7c44`.
 
 ## 15. Variable & Argument Intelligence
 

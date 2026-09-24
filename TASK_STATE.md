@@ -140,5 +140,7 @@ Continue reviewing remaining unchecked backlog items only when requested.
 - Added schema-validated declarative rule/profile modules with import/export UI and no executable plugin loading.
 - Added optional GitHub, GitLab, and Azure DevOps Pull Request review using provider metadata plus the existing local read-only Git comparison engine; review comments require an explicit user action and credentials remain backend-only.
 - Added the Tauri v2 signed updater client, Settings/About update UI, protected GitHub updater key, and tag-release manifest publishing workflow; live installed-app upgrade remains pending until the first signed release is published.
+- Completed Linux desktop packaging validation on Ubuntu 22.04 in GitHub Actions run `36051909068`; the generated 0.1.0 `.deb` and AppImage artifacts passed non-empty package and bundled sidecar checks.
+- Downloaded and independently hashed the Linux artifacts: `.deb` `48fc63a1dc211fe653a2137851ff3843a6c90ee7f3ea75eb599f24d4944ff251`, AppImage `e124898d8738225f9d3dd7e6d21ae7da315c19b81d2ad1ade223c6325a4c7c44`.
 - Preserve existing architecture.
 - Update this file after meaningful progress.
