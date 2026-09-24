@@ -3,6 +3,8 @@ name: Linux Desktop Release
 on:
   workflow_dispatch:
   push:
+    branches:
+      - "codex/backlog-completion-*"
     tags:
       - "v*"
 
