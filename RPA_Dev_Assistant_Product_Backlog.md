@@ -216,7 +216,7 @@ Kurallar:
 - [x] Şirket içi merkezi kullanım — Opt-in central mode, güvenli kayıtlı proje analizi, tenant izolasyonu, API-key/OIDC kimlik doğrulama, kota, hash-chain audit, history, dashboard, merkezi web/admin deneyimi ve GitHub Actions run `36583280992` ile doğrulanmış on-prem container dağıtımı hazırdır.
 - [x] Kullanıcı yönetimi — Tenant-scoped kullanıcı provision/deactivate, rol/team ataması ve yalnız oluşturma/rotasyon yanıtında gösterilen 256-bit API anahtarı desteklenir; anahtarın yalnız SHA-256 özeti kalıcılaştırılır.
 - [x] Rol ve yetki yönetimi — Viewer, Developer, Manager, TenantAdmin ve SystemAdmin rolleri endpoint ve tenant kapsamlarında uygulanır; dış kimlik sağlayıcının rol claim’leri yetki kaynağı olarak kullanılmaz.
-- [ ] SSO — Kısmi: HTTPS authority/audience doğrulamalı OIDC JWT, configurable tenant/subject claim mapping ve internal role eşlemesi hazır; gerçek kurumsal IdP ile canlı kabul testi bekliyor.
+- [x] SSO — HTTPS authority/audience doğrulamalı OIDC JWT, configurable tenant/subject claim mapping, önceden provision edilmiş internal role eşlemesi ve API-key/OIDC hybrid mode desteklenir. GitHub Actions OIDC issuer’ından alınan gerçek JWT ile imza, issuer, audience, lifetime, tenant/subject mapping ve tenant-scoped erişim doğrulandı; yanlış audience token’ı `401` ile reddedildi (run `36624229860`).
 - [x] Merkezi/kurumsal audit log — Tenant-scoped yönetim ve analiz mutasyonları actor, operation id, resource, outcome ve UTC zamanıyla append-only JSONL audit’e yazılır.
 - [x] Merkezi çok kullanıcılı rule/profile governance — TenantAdmin tarafından yönetilen tenant profile’ları built-in profile’ları tenant kapsamında override eder ve central analiz hattı exact profile nesnesini kullanır.
 - [x] Merkezi analysis history — Merkezi analizler tenant/project/user/team/profile kimliği, durum, score, grade ve finding metrikleriyle kalıcı tutulur; yetkiye göre filtrelenen history API’si bulunur.
@@ -305,9 +305,9 @@ Kurallar:
 
 **Son inceleme tarihi:** 2026-09-29
 **İnceleyen:** Codex
-**Tamamlanan madde sayısı:** 219
-**Kısmi madde sayısı:** 4
-**Bekleyen madde sayısı:** 5
+**Tamamlanan madde sayısı:** 220
+**Kısmi madde sayısı:** 3
+**Bekleyen madde sayısı:** 4
 
 ### Notlar
 
