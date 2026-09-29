@@ -1571,7 +1571,7 @@ Tauri installer output is expected under:
 frontend/src-tauri/target/release/bundle/nsis/
 ```
 
-The Windows release workflow at `.github/workflows/windows-desktop-release.yml` validates backend/frontend code, publishes the sidecar, builds the NSIS installer, verifies a non-empty artifact, and uploads it. When `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD` repository secrets are configured, the installer is Authenticode-signed with a trusted timestamp. Unsigned builds may trigger Windows SmartScreen.
+The Windows release workflow at `.github/workflows/windows-desktop-release.yml` validates backend/frontend code, publishes the sidecar, builds the NSIS installer, verifies a non-empty artifact, and uploads it. Tagged production releases fail closed unless `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD` are configured. The installer is Authenticode-signed with a trusted timestamp and then re-signed with the Tauri updater key because Authenticode changes the installer bytes. Non-tag workflow dispatches may still produce explicitly non-production unsigned validation artifacts.
 
 The current public Tauri-signed updater release is [v0.1.3](https://github.com/MinaDilek/RpaDevAssistant/releases/tag/v0.1.3). GitHub Actions run `36621740903` validated the backend/frontend suites, NSIS package, silent installation, updater signature, and published manifest. Run `36623676197` additionally installed `v0.1.2`, upgraded the same installation to `v0.1.3`, and verified the installed product version, backend sidecar, and preserved local user data. The reusable acceptance workflow compares any two published tags. Windows Authenticode signing remains conditional on the separate certificate secrets.
 

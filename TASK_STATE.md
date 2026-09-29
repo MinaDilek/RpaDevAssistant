@@ -12,6 +12,7 @@
 - GitHub Actions run `36583280992` successfully validated the on-prem image build, health endpoint, frontend delivery, and central mode.
 - Published Tauri-signed Windows updater release `v0.1.3`; run `36621740903` passed backend/frontend validation, NSIS build, silent-install smoke testing, updater signing, and release publication. Run `36623676197` then upgraded an installed `v0.1.2` copy to `v0.1.3` and verified manifest/signature consistency, product version replacement, sidecar continuity, and preserved user data.
 - Completed live standards-based SSO acceptance against the GitHub Actions OIDC issuer in run `36624229860`: signed token validation, strict issuer/audience/lifetime checks, configurable tenant/subject claims, provisioned internal roles, tenant-scoped access, and wrong-audience rejection all passed through the packaged on-prem API.
+- Hardened tagged Windows releases to fail closed without Authenticode certificate secrets. With a certificate, the workflow timestamp-signs the installer, re-signs the changed bytes for the Tauri updater, and verifies both the Authenticode certificate/timestamp and updater manifest before publication.
 - Focused central API tests pass 5/5 and focused frontend tests pass 5/5.
 
 ## Status
