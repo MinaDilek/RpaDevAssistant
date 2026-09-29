@@ -291,9 +291,24 @@ public sealed class UiPathWorkflowRenameService : IUiPathWorkflowRenameService
             return true;
         }
 
-        var callerDirectory = Path.GetDirectoryName(callerRelative.Replace('/', Path.DirectorySeparatorChar)) ?? string.Empty;
-        var resolved = Normalize(Path.GetFullPath(Path.Combine(Path.DirectorySeparatorChar.ToString(), callerDirectory, normalized))
-            .TrimStart(Path.DirectorySeparatorChar));
+        var callerSegments = Normalize(callerRelative).Split('/', StringSplitOptions.RemoveEmptyEntries)[..^1];
+        var resolvedSegments = new List<string>(callerSegments);
+        foreach (var segment in normalized.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment == ".") continue;
+            if (segment == "..")
+            {
+                if (resolvedSegments.Count == 0)
+                {
+                    isCallerRelativeMatch = false;
+                    return false;
+                }
+                resolvedSegments.RemoveAt(resolvedSegments.Count - 1);
+                continue;
+            }
+            resolvedSegments.Add(segment);
+        }
+        var resolved = string.Join('/', resolvedSegments);
         isCallerRelativeMatch = resolved.Equals(oldRelative, StringComparison.OrdinalIgnoreCase);
         return isCallerRelativeMatch;
     }

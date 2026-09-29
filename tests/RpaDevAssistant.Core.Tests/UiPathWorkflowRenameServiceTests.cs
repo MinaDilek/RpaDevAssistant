@@ -36,6 +36,24 @@ public sealed class UiPathWorkflowRenameServiceTests
     }
 
     [Fact]
+    public async Task RenameAsync_NormalizesWindowsStyleCallerRelativeReferences()
+    {
+        using var project = RenameProject.Create();
+        project.Write("Business/Old.xaml", Workflow("Old"));
+        project.Write("Framework/Caller.xaml", Workflow("Caller", "..\\Business\\Old.xaml"));
+
+        var result = await CreateService().RenameAsync(new UiPathWorkflowRenameRequest
+        {
+            ProjectPath = project.Root,
+            WorkflowPath = "Business/Old.xaml",
+            NewWorkflowPath = "Business/NewName.xaml"
+        }, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Contains("..\\Business\\NewName.xaml", File.ReadAllText(Path.Combine(project.Root, "Framework", "Caller.xaml")));
+    }
+
+    [Fact]
     public async Task RenameAsync_LeavesDynamicReferenceUntouchedAndReportsManualReview()
     {
         using var project = RenameProject.Create();
