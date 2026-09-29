@@ -171,7 +171,14 @@ public sealed class UiPathGitComparisonServiceTests
 
         public void Dispose()
         {
-            if (Directory.Exists(Root)) Directory.Delete(Root, recursive: true);
+            if (!Directory.Exists(Root)) return;
+            foreach (var path in Directory.EnumerateFileSystemEntries(Root, "*", SearchOption.AllDirectories))
+            {
+                try { File.SetAttributes(path, FileAttributes.Normal); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+            Directory.Delete(Root, recursive: true);
         }
     }
 }

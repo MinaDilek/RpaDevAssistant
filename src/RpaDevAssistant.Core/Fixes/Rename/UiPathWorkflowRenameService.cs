@@ -303,8 +303,19 @@ public sealed class UiPathWorkflowRenameService : IUiPathWorkflowRenameService
         var value = newRelative;
         if (useCallerRelativePath)
         {
-            var callerDirectory = Path.GetDirectoryName(callerRelative.Replace('/', Path.DirectorySeparatorChar)) ?? string.Empty;
-            value = Path.GetRelativePath(callerDirectory.Length == 0 ? "." : callerDirectory, newRelative.Replace('/', Path.DirectorySeparatorChar));
+            var callerDirectory = Normalize(callerRelative)
+                .Split('/', StringSplitOptions.RemoveEmptyEntries)[..^1];
+            var target = Normalize(newRelative)
+                .Split('/', StringSplitOptions.RemoveEmptyEntries);
+            var commonLength = 0;
+            while (commonLength < callerDirectory.Length
+                && commonLength < target.Length
+                && callerDirectory[commonLength].Equals(target[commonLength], PathComparison))
+            {
+                commonLength++;
+            }
+            value = string.Join('/', Enumerable.Repeat("..", callerDirectory.Length - commonLength)
+                .Concat(target.Skip(commonLength)));
         }
         if (original.Contains('\\', StringComparison.Ordinal))
         {
