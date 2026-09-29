@@ -2,6 +2,15 @@ name: Windows Desktop Release
 
 on:
   workflow_dispatch:
+    inputs:
+      acceptance_from_tag:
+        description: Previously installed release used by the upgrade acceptance job
+        required: true
+        default: v0.1.2
+      acceptance_to_tag:
+        description: Target release used by the upgrade acceptance job
+        required: true
+        default: v0.1.3
   push:
     branches:
       - "codex/windows-installer-validation-*"
@@ -116,3 +125,20 @@ jobs:
           gh release view $env:GITHUB_REF_NAME *> $null
           if ($LASTEXITCODE -ne 0) { gh release create $env:GITHUB_REF_NAME --title "RPA Dev Assistant $env:GITHUB_REF_NAME" --generate-notes }
           gh release upload $env:GITHUB_REF_NAME @($assets.FullName) --clobber
+
+  installed-update-acceptance:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate signed installed update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          ./scripts/Test-WindowsInstalledUpdate.ps1 `
+            -FromTag "${{ inputs.acceptance_from_tag }}" `
+            -ToTag "${{ inputs.acceptance_to_tag }}" `
+            -Repository "$env:GITHUB_REPOSITORY" `
+            -WorkingRoot "$env:RUNNER_TEMP\installed-update"

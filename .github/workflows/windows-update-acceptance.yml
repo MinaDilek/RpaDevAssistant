@@ -18,87 +18,15 @@ jobs:
   installed-upgrade:
     runs-on: windows-2022
     steps:
-      - name: Download both release installers and updater metadata
+      - uses: actions/checkout@v4
+
+      - name: Validate signed installed update
         env:
           GH_TOKEN: ${{ github.token }}
-          FROM_TAG: ${{ inputs.from_tag }}
-          TO_TAG: ${{ inputs.to_tag }}
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\from", "$env:RUNNER_TEMP\to" | Out-Null
-          gh release download $env:FROM_TAG --repo $env:GITHUB_REPOSITORY --pattern "*-setup.exe" --dir "$env:RUNNER_TEMP\from"
-          gh release download $env:TO_TAG --repo $env:GITHUB_REPOSITORY --pattern "*-setup.exe" --pattern "*-setup.exe.sig" --pattern "latest.json" --dir "$env:RUNNER_TEMP\to"
-
-      - name: Validate signed updater contract
-        env:
-          TO_TAG: ${{ inputs.to_tag }}
-        shell: pwsh
-        run: |
-          $releaseDirectory = "$env:RUNNER_TEMP\to"
-          $installer = Get-ChildItem $releaseDirectory -Filter "*-setup.exe" | Select-Object -First 1
-          $signatureFile = Get-ChildItem $releaseDirectory -Filter "*-setup.exe.sig" | Select-Object -First 1
-          $manifestPath = Join-Path $releaseDirectory "latest.json"
-          if (-not $installer -or -not $signatureFile -or -not (Test-Path $manifestPath)) {
-            throw "The target release is missing its installer, signature, or latest.json."
-          }
-
-          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
-          $expectedVersion = $env:TO_TAG.TrimStart('v')
-          if ($manifest.version -ne $expectedVersion) {
-            throw "Manifest version '$($manifest.version)' does not match '$expectedVersion'."
-          }
-
-          $platform = $manifest.platforms.'windows-x86_64'
-          if (-not $platform) { throw "latest.json does not contain windows-x86_64 metadata." }
-          $signature = (Get-Content $signatureFile.FullName -Raw).Trim()
-          if ($platform.signature -ne $signature) {
-            throw "latest.json signature does not match the published detached signature."
-          }
-
-          $response = Invoke-WebRequest -Uri $platform.url -Method Head -MaximumRedirection 5
-          if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 400) {
-            throw "Updater package URL is not reachable: $($response.StatusCode)."
-          }
-
-      - name: Install previous release and update it in place
-        env:
-          FROM_TAG: ${{ inputs.from_tag }}
-          TO_TAG: ${{ inputs.to_tag }}
-        shell: pwsh
-        run: |
-          $oldInstaller = Get-ChildItem "$env:RUNNER_TEMP\from" -Filter "*-setup.exe" | Select-Object -First 1
-          $newInstaller = Get-ChildItem "$env:RUNNER_TEMP\to" -Filter "*-setup.exe" | Select-Object -First 1
-          if (-not $oldInstaller -or -not $newInstaller) { throw "Release installers were not downloaded." }
-
-          $installDirectory = Join-Path $env:RUNNER_TEMP "RpaDevAssistantUpgrade"
-          $userDataDirectory = Join-Path $env:LOCALAPPDATA "RpaDevAssistant"
-          $marker = Join-Path $userDataDirectory "update-acceptance.marker"
-          New-Item -ItemType Directory -Force -Path $userDataDirectory | Out-Null
-          Set-Content -Path $marker -Value "preserve-me" -NoNewline
-
-          $oldInstall = Start-Process -FilePath $oldInstaller.FullName -ArgumentList "/S", "/D=$installDirectory" -Wait -PassThru
-          if ($oldInstall.ExitCode -ne 0) { throw "Previous release installation failed with exit code $($oldInstall.ExitCode)." }
-          $desktopExecutable = Join-Path $installDirectory "rpadevassistant-desktop.exe"
-          if (-not (Test-Path $desktopExecutable)) { throw "Previous desktop executable was not installed." }
-          $oldHash = (Get-FileHash $desktopExecutable -Algorithm SHA256).Hash
-
-          Get-Process "rpadevassistant-desktop" -ErrorAction SilentlyContinue | Stop-Process -Force
-          $newInstall = Start-Process -FilePath $newInstaller.FullName -ArgumentList "/S", "/D=$installDirectory" -Wait -PassThru
-          if ($newInstall.ExitCode -ne 0) { throw "Updated release installation failed with exit code $($newInstall.ExitCode)." }
-          if (-not (Test-Path $desktopExecutable)) { throw "Updated desktop executable is missing." }
-
-          $newHash = (Get-FileHash $desktopExecutable -Algorithm SHA256).Hash
-          if ($newHash -eq $oldHash) { throw "The installed desktop binary was not replaced during upgrade." }
-          if ((Get-Content $marker -Raw) -ne "preserve-me") { throw "Application user data was not preserved during upgrade." }
-
-          $expectedVersion = $env:TO_TAG.TrimStart('v')
-          $installedVersion = (Get-Item $desktopExecutable).VersionInfo.ProductVersion
-          if (-not $installedVersion.StartsWith($expectedVersion)) {
-            throw "Installed product version '$installedVersion' does not match '$expectedVersion'."
-          }
-
-          $sidecar = Get-ChildItem $installDirectory -Recurse -Filter "RpaDevAssistant.Api*.exe" | Select-Object -First 1
-          if (-not $sidecar) { throw "The updated backend sidecar is missing." }
-          Write-Host "Accepted installed upgrade $env:FROM_TAG -> $env:TO_TAG"
-          Write-Host "Installed desktop: $desktopExecutable"
-          Write-Host "Installed sidecar: $($sidecar.FullName)"
+          ./scripts/Test-WindowsInstalledUpdate.ps1 `
+            -FromTag "${{ inputs.from_tag }}" `
+            -ToTag "${{ inputs.to_tag }}" `
+            -Repository "$env:GITHUB_REPOSITORY" `
+            -WorkingRoot "$env:RUNNER_TEMP\installed-update"
