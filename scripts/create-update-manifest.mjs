@@ -18,7 +18,9 @@ if (!updaterName) {
 const signature = (await readFile(path.join(bundleDirectory, `${updaterName}.sig`), 'utf8')).trim();
 if (!signature) throw new Error('Updater signature is empty.');
 
-const encodedAsset = updaterName.split('/').map(encodeURIComponent).join('/');
+// GitHub release assets normalize whitespace in uploaded file names to dots.
+const releaseAssetName = updaterName.replace(/\s+/g, '.');
+const encodedAsset = releaseAssetName.split('/').map(encodeURIComponent).join('/');
 const manifest = {
   version: tag.slice(1),
   notes: `RPA Dev Assistant ${tag}`,

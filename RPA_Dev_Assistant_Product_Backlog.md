@@ -244,7 +244,7 @@ Kurallar:
 
 ## 14. Product Platform
 
-- [ ] Auto-update — Kısmi: Tauri v2 signed updater, HTTPS GitHub Releases endpoint, desktop-only background check, explicit install/relaunch UI, TR/EN states, protected signing key ve tag release manifest workflow’u hazır. İlk imzalı `v*` release yayınlanıp installed-app upgrade doğrulanmadan tamamlandı sayılmayacak.
+- [ ] Auto-update — Kısmi: Tauri v2 signed updater, HTTPS GitHub Releases endpoint, desktop-only background check, explicit install/relaunch UI ve TR/EN states hazır. `v0.1.2` release’i run `36587369163` ile üretildi; signed `setup.exe`, `.sig` ve erişilebilir `latest.json` dışarıdan doğrulandı. Önceki kurulu sürümden gerçek upgrade acceptance henüz yapılmadı.
 - [x] Telemetry / kullanım istatistikleri
 - [x] Crash reporting
 - [x] Plugin/modül sistemi — Versioned/schema-validated deklaratif JSON modülleri custom rule ve custom profile’ları birlikte taşır; import tamamı doğrulanmadan başlamaz, built-in `RPA*` kimlikleri korunur ve executable plugin code kabul edilmez.
