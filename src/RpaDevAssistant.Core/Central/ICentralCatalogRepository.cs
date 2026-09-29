@@ -12,6 +12,8 @@ public interface ICentralCatalogRepository
 
     CentralUserCredential SaveUser(CentralUser user);
 
+    CentralUser ProvisionFederatedUser(CentralUser user);
+
     CentralTeam SaveTeam(CentralTeam team);
 
     CentralProject SaveProject(CentralProject project);

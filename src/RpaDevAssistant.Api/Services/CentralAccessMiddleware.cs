@@ -92,7 +92,7 @@ public sealed class CentralAccessMiddleware(RequestDelegate next)
         }
     }
 
-    private static string? ReadApiKey(HttpRequest request)
+    internal static string? ReadApiKey(HttpRequest request)
     {
         var authorization = request.Headers.Authorization.ToString();
         if (authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))

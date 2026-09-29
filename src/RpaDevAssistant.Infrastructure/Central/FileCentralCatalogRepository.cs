@@ -105,24 +105,12 @@ public sealed class FileCentralCatalogRepository : ICentralCatalogRepository
 
     public CentralUserCredential SaveUser(CentralUser user)
     {
-        ArgumentNullException.ThrowIfNull(user);
-        ValidateIdentifier(user.Id, nameof(user.Id));
-        ValidateIdentifier(user.TenantId, nameof(user.TenantId));
-        if (string.IsNullOrWhiteSpace(user.Email) || !user.Email.Contains('@', StringComparison.Ordinal))
-            throw new ArgumentException("A valid user email is required.", nameof(user));
-        if (string.IsNullOrWhiteSpace(user.DisplayName)) throw new ArgumentException("User display name is required.", nameof(user));
+        ValidateUser(user);
 
         lock (sync)
         {
             var state = ReadState();
-            if (!state.Tenants.Any(item => item.Id == user.TenantId)) throw new InvalidOperationException("The selected tenant does not exist.");
-            if (state.Users.Any(item => item.Id != user.Id && string.Equals(item.Email, user.Email, StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidOperationException("The email address is already assigned to another user.");
-            if (!string.IsNullOrWhiteSpace(user.ExternalSubject)
-                && state.Users.Any(item => item.Id != user.Id && item.TenantId == user.TenantId && item.ExternalSubject == user.ExternalSubject))
-                throw new InvalidOperationException("The federated subject is already assigned to another user in this tenant.");
-            if (user.TeamIds.Any(id => state.Teams.All(team => team.Id != id || team.TenantId != user.TenantId)))
-                throw new InvalidOperationException("Every assigned team must belong to the same tenant.");
+            ValidateUserState(state, user);
 
             Upsert(state.Users, user, item => item.Id);
             var apiKey = $"rpa_{Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant()}";
@@ -130,6 +118,20 @@ public sealed class FileCentralCatalogRepository : ICentralCatalogRepository
             state.Credentials.Add(new StoredCredential { UserId = user.Id, ApiKeyHash = Hash(apiKey) });
             WriteState(state);
             return new CentralUserCredential(user, apiKey);
+        }
+    }
+
+    public CentralUser ProvisionFederatedUser(CentralUser user)
+    {
+        ValidateUser(user);
+
+        lock (sync)
+        {
+            var state = ReadState();
+            ValidateUserState(state, user);
+            Upsert(state.Users, user, item => item.Id);
+            WriteState(state);
+            return user;
         }
     }
 
@@ -484,6 +486,28 @@ public sealed class FileCentralCatalogRepository : ICentralCatalogRepository
     {
         if (string.IsNullOrWhiteSpace(value) || value.Length > 80 || value.Any(character => !char.IsAsciiLetterOrDigit(character) && character is not '-' and not '_'))
             throw new ArgumentException("Identifiers may contain only ASCII letters, digits, '-' and '_'.", name);
+    }
+
+    private static void ValidateUser(CentralUser user)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        ValidateIdentifier(user.Id, nameof(user.Id));
+        ValidateIdentifier(user.TenantId, nameof(user.TenantId));
+        if (string.IsNullOrWhiteSpace(user.Email) || !user.Email.Contains('@', StringComparison.Ordinal))
+            throw new ArgumentException("A valid user email is required.", nameof(user));
+        if (string.IsNullOrWhiteSpace(user.DisplayName)) throw new ArgumentException("User display name is required.", nameof(user));
+    }
+
+    private static void ValidateUserState(CatalogState state, CentralUser user)
+    {
+        if (!state.Tenants.Any(item => item.Id == user.TenantId)) throw new InvalidOperationException("The selected tenant does not exist.");
+        if (state.Users.Any(item => item.Id != user.Id && string.Equals(item.Email, user.Email, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("The email address is already assigned to another user.");
+        if (!string.IsNullOrWhiteSpace(user.ExternalSubject)
+            && state.Users.Any(item => item.Id != user.Id && item.TenantId == user.TenantId && item.ExternalSubject == user.ExternalSubject))
+            throw new InvalidOperationException("The federated subject is already assigned to another user in this tenant.");
+        if (user.TeamIds.Any(id => state.Teams.All(team => team.Id != id || team.TenantId != user.TenantId)))
+            throw new InvalidOperationException("Every assigned team must belong to the same tenant.");
     }
 
     private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
