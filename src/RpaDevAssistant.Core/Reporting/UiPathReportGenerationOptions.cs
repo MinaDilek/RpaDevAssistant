@@ -1,10 +1,14 @@
 namespace RpaDevAssistant.Core.Reporting;
 
+using RpaDevAssistant.Core.Analysis.Profiles;
+
 public sealed record UiPathReportGenerationOptions
 {
     public required string ProjectPath { get; init; }
 
     public string? ProfileId { get; init; }
+
+    public UiPathRuleProfile? Profile { get; init; }
 
     public string? Locale { get; init; }
 

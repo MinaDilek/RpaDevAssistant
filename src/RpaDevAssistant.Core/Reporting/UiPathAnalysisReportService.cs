@@ -47,7 +47,9 @@ public sealed class UiPathAnalysisReportService : IUiPathAnalysisReportService
     public async Task<UiPathAnalysisReport> GenerateAsync(UiPathReportGenerationOptions options, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);
-        var result = await analyzer.AnalyzeAsync(options.ProjectPath, options.ProfileId, cancellationToken).ConfigureAwait(false);
+        var result = options.Profile is null
+            ? await analyzer.AnalyzeAsync(options.ProjectPath, options.ProfileId, cancellationToken).ConfigureAwait(false)
+            : await analyzer.AnalyzeAsync(options.ProjectPath, options.Profile, cancellationToken).ConfigureAwait(false);
         var report = reportBuilder.Build(result.ProjectScan, result.Analysis, result.QualityScore, result.Profile);
 
         UiPathAnalysisComparison? comparison = null;

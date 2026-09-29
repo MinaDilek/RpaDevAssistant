@@ -1581,7 +1581,7 @@ Runtime configuration is centralized under the `RpaDevAssistant` configuration s
 
 Central mode is opt-in and disabled by default, so the local desktop contract is unchanged. Enable it with `RpaDevAssistant__Central__Enabled=true`, configure a dedicated storage root, and provide `RPADA_CENTRAL_BOOTSTRAP_API_KEY` with at least 32 characters. The bootstrap key is only for initial tenant and administrator provisioning. Issued user API keys are returned once and only SHA-256 hashes are stored.
 
-Central endpoints under `/api/central` provide tenant-scoped users, roles, teams, registered UiPath projects, rule profiles, analysis history, audit events, quotas, and dashboard trends. Central analyses accept a registered project ID rather than a caller-supplied filesystem path. Registered roots must exist, contain `project.json`, resolve symlinks, and cannot be assigned across tenants.
+Central endpoints under `/api/central` provide tenant-scoped users, roles, teams, registered UiPath projects, rule profiles, analysis history, audit events, quotas, dashboard trends, and branded report exports. Central analyses and report exports accept a registered project ID rather than a caller-supplied filesystem path, run with the project's exact tenant profile, and consume the same monthly analysis quota. Registered roots must exist, contain `project.json`, resolve symlinks, and cannot be assigned across tenants.
 
 When central mode is enabled, **Company Workspace** appears in the application navigation. Its access token remains in React session memory and is not written to `localStorage`. The workspace provides tenant branding, user/role provisioning, one-time API key issuance, teams, governed project registration/execution, tenant rule profiles, quality trends, quota usage, analysis history, and role-filtered audit history.
 
@@ -1591,7 +1591,7 @@ Offline licensing is optional for internal installations and fail-closed when en
 
 Central audit records use an append-only SHA-256 hash chain. Reads and new writes fail closed after tampering, while `/api/central/audit/export` provides a tenant-scoped schema-versioned export with integrity status. Legacy audit lines remain readable and become protected by the next chained event.
 
-The current central catalog is an atomic, process-local file store intended for a single-instance on-premise deployment. A non-root container deployment is provided in `deploy/onprem`: it serves the compiled frontend and API from one origin, binds to loopback by default, mounts governed projects read-only, and persists catalog/history in a named volume. See `deploy/onprem/README.md`. Docker was not available in the development host used for this implementation, so an actual container build remains a deployment acceptance step. Multi-instance SaaS deployment requires a transactional shared persistence provider before production use.
+The current central catalog is an atomic, process-local file store intended for a single-instance on-premise deployment. A non-root container deployment is provided in `deploy/onprem`: it serves the compiled frontend and API from one origin, binds to loopback by default, mounts governed projects read-only, and persists catalog/history in a named volume. See `deploy/onprem/README.md`. GitHub Actions run `36583280992` successfully built and started the image and validated health, frontend delivery, and central mode. Multi-instance SaaS deployment still requires a transactional shared persistence provider before production use.
 
 Example overrides:
 

@@ -3700,6 +3700,7 @@ td {
 .central-entity-list > div { min-height: 44px; justify-content: space-between; gap: 12px; border-bottom: 1px solid #e2e8f0; padding: 8px 4px; }
 .central-entity-list span { display: grid; gap: 3px; }
 .central-entity-list small { color: #64748b; }
+.central-row-actions { display: flex !important; grid-template-columns: none !important; flex-direction: row; gap: 8px !important; }
 .central-history-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
 .central-json { display: block; width: 100%; min-height: 180px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .central-secret { display: grid; gap: 5px; margin: 12px 0; padding: 12px; border-left: 3px solid #d97706; background: #fffbeb; }

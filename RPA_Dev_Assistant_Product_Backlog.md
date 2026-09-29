@@ -213,7 +213,7 @@ Kurallar:
 
 ## 12. Company Internal Version
 
-- [ ] Şirket içi merkezi kullanım — Kısmi: Opt-in central mode, güvenli kayıtlı proje analizi, tenant izolasyonu, kimlik doğrulama, kota, hash-chain audit, history, şirket dashboard’u ve merkezi web/admin deneyimi hazır; gerçek şirket ağı/IdP/container kabulü bekliyor.
+- [x] Şirket içi merkezi kullanım — Opt-in central mode, güvenli kayıtlı proje analizi, tenant izolasyonu, API-key/OIDC kimlik doğrulama, kota, hash-chain audit, history, dashboard, merkezi web/admin deneyimi ve GitHub Actions run `36583280992` ile doğrulanmış on-prem container dağıtımı hazırdır.
 - [x] Kullanıcı yönetimi — Tenant-scoped kullanıcı provision/deactivate, rol/team ataması ve yalnız oluşturma/rotasyon yanıtında gösterilen 256-bit API anahtarı desteklenir; anahtarın yalnız SHA-256 özeti kalıcılaştırılır.
 - [x] Rol ve yetki yönetimi — Viewer, Developer, Manager, TenantAdmin ve SystemAdmin rolleri endpoint ve tenant kapsamlarında uygulanır; dış kimlik sağlayıcının rol claim’leri yetki kaynağı olarak kullanılmaz.
 - [ ] SSO — Kısmi: HTTPS authority/audience doğrulamalı OIDC JWT, configurable tenant/subject claim mapping ve internal role eşlemesi hazır; gerçek kurumsal IdP ile canlı kabul testi bekliyor.
@@ -224,21 +224,21 @@ Kurallar:
 - [x] Şirket dashboard’u — Tenant-scoped proje/son analiz/kota/trend/team/developer metrikleri Company Workspace ekranında gösterilir; yönetilen proje analizi aynı ekrandan çalıştırılabilir.
 - [x] Proje kalite trendleri — Central dashboard her yetkili proje için zaman sıralı score, grade ve finding trendi döndürür.
 - [x] Developer/team bazlı kalite metrikleri — Tamamlanan analizler üzerinden tenant-scoped analysis count ve average score metrikleri üretilir.
-- [ ] On-premise deployment — Kısmi: Non-root tek-origin container, read-only proje mount’u, kalıcı data volume’u, loopback binding, healthcheck, OIDC/API-key environment contract’ı ve Compose runbook’u hazır; geliştirme hostunda Docker bulunmadığından gerçek image build/deployment kabulü bekliyor.
+- [x] On-premise deployment — Non-root tek-origin container, read-only proje mount’u, kalıcı data volume’u, loopback binding, healthcheck, OIDC/API-key environment contract’ı ve Compose runbook’u hazır; GitHub Actions run `36583280992` image build, health, frontend ve central-mode kabul kontrollerini başarıyla tamamladı.
 
 ## 13. Enterprise / Customer Version
 
 - [x] Multi-tenant yapı — Tenant kimliği kullanıcı, takım, proje, profile, analiz history ve audit kayıtlarının zorunlu partition key’idir; system admin dışındaki tüm sorgular internal principal tenant’ına scope edilir.
 - [x] Müşteri bazlı izolasyon — Cross-tenant team membership, görünürlük, profile/history erişimi ve aynı canonical/symlink-resolved project root’un farklı tenant’a atanması testlerle engellenir.
 - [x] Müşteri bazlı rule profile — Aynı profile ID farklı tenant’larda bağımsız saklanır ve yalnız ilgili tenant analizinde uygulanır.
-- [ ] Müşteri bazlı branding — Kısmi: Tenant branding name/accent metadata’sı merkezi katalogda izole saklanıyor ve merkezi oturumda uygulama başlığı/brand rengine uygulanıyor; tenant branding’in merkezi report export’a taşınması bekliyor.
+- [x] Müşteri bazlı branding — Tenant branding name/accent metadata’sı merkezi katalogda izole saklanır; merkezi oturumun uygulama başlığı/brand rengine ve kayıtlı proje/profile kullanan tenant-scoped HTML/JSON/PDF report export hattına uygulanır.
 - [x] Lisanslama — Opsiyonel offline lisanslar RSA-PSS/SHA-256 ile doğrulanır; süre, plan, aktif tenant ve aylık analiz limitleri fail-closed uygulanır, private key deployment’a girmez ve operator issuer aracı/testleri bulunur.
 - [ ] Subscription modeli — Kısmi: Internal, Trial, Team ve Enterprise planı, imzalı entitlement süresi ve quota enforcement hazır; ödeme/billing sağlayıcısı, renewal ve invoice lifecycle yok.
 - [x] Kullanım kotası — Aylık tenant analiz rezervasyonu atomik olarak sayılır, limit öncesi uygulanır ve dashboard’da kullanım/limit birlikte raporlanır.
 - [ ] Enterprise SSO — Kısmi: OIDC JWT ve provision edilmiş federated subject/tenant mapping hazır; Entra ID/Okta canlı kabul testi ve provisioning otomasyonu bekliyor.
 - [ ] Audit / compliance — Kısmi: Tenant-scoped append-only SHA-256 hash chain, fail-closed tamper detection ve schema-versioned export hazır; kurumsal retention policy ve bağımsız compliance kabulü bekliyor.
 - [x] Customer admin panel — Merkezi çalışma alanı tenant, branding, kullanıcı/rol, tek-seferlik API key, ekip, proje, rule profile, quota/dashboard, history ve audit yönetimini mevcut yetki contract’ıyla sunar.
-- [ ] On-premise seçeneği — Kısmi: Tek instance için container/Compose paketi ve güvenli deployment runbook’u hazır; gerçek Docker host acceptance ve TLS reverse proxy kurulumu bekliyor.
+- [x] On-premise seçeneği — Tek instance container/Compose paketi, güvenli deployment runbook’u, reverse-proxy TLS örneği ve GitHub Actions run `36583280992` üzerinde gerçek Docker image/health/frontend/central-mode kabulü tamamlandı.
 - [ ] SaaS seçeneği
 - [x] Private AI provider desteği
 
@@ -303,13 +303,13 @@ Kurallar:
 
 ## İnceleme Özeti
 
-**Son inceleme tarihi:** 2026-09-24
+**Son inceleme tarihi:** 2026-09-29
 **İnceleyen:** Codex
-**Tamamlanan madde sayısı:** 213
-**Kısmi madde sayısı:** 9
-**Bekleyen madde sayısı:** 11
+**Tamamlanan madde sayısı:** 217
+**Kısmi madde sayısı:** 6
+**Bekleyen madde sayısı:** 7
 
 ### Notlar
 
-- `PRODUCT_BACKLOG.md` dosyası bulunmadığı için bu inceleme repository’deki mevcut backlog kaynağı olan `RPA_Dev_Assistant_Product_Backlog.md` üzerinde yapıldı.
+- `PRODUCT_BACKLOG.md` kararlı giriş noktasıdır; maddeler tek kaynak olan `RPA_Dev_Assistant_Product_Backlog.md` üzerinde güncellenir.
 - Tamamlandı işaretleri kod, test, endpoint, frontend entegrasyonu ve README kanıtlarıyla sınırlı tutuldu.

@@ -1,13 +1,15 @@
 # Current Task
 
-## 2026-09-24 Central company workspace and on-prem foundation
+## 2026-09-29 Central company workspace and on-prem deployment
 
 - Added tenant-isolated central catalog, roles, API key/OIDC authentication, governed project analysis, quotas, rule profiles, history, quality metrics, and a functional TR/EN Company Workspace UI.
 - Central credentials remain session-memory only; user API keys are shown once and persisted only as SHA-256 hashes.
 - Added append-only tamper-evident audit chaining and tenant-scoped integrity export.
 - Added optional RSA-PSS/SHA-256 offline licensing with expiry, plan, active-tenant, and monthly-analysis entitlement enforcement plus an operator-side issuer utility.
 - Added a non-root, single-origin on-prem container/Compose package with read-only project mounts and persistent application data.
-- Focused central backend tests passed 18/18 and focused frontend tests passed 5/5. Docker image execution remains unvalidated because Docker is unavailable on this host.
+- Added tenant-branded central report export using the registered project and exact tenant profile; report analysis is role- and quota-governed and recorded in central history.
+- GitHub Actions run `36583280992` successfully validated the on-prem image build, health endpoint, frontend delivery, and central mode.
+- Focused central API tests pass 5/5 and focused frontend tests pass 5/5.
 
 ## Status
 IN PROGRESS

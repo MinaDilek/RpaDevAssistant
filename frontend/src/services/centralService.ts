@@ -74,6 +74,25 @@ export async function runCentralAnalysis(token: string, projectId: string): Prom
   return centralRequest(`/api/central/projects/${encodeURIComponent(projectId)}/analyze`, token, {});
 }
 
+export async function exportCentralReport(token: string, projectId: string, format: 'html' | 'json' | 'pdf', locale: 'tr' | 'en'): Promise<void> {
+  const baseUrl = await getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/api/central/projects/${encodeURIComponent(projectId)}/report`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token.trim()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ format, locale }),
+  });
+  if (!response.ok) throw new Error(`Central report export failed with HTTP ${response.status}.`);
+  const blob = await response.blob();
+  const disposition = response.headers.get('content-disposition') ?? '';
+  const fileName = disposition.match(/filename\*?=(?:UTF-8''|\")?([^";]+)/i)?.[1] ?? `rpa-report.${format}`;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = decodeURIComponent(fileName.replaceAll('"', ''));
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 async function centralRequest<T>(path: string, token: string, body?: unknown): Promise<T> {
   const baseUrl = await getBackendBaseUrl();
   const response = await fetch(`${baseUrl}${path}`, {

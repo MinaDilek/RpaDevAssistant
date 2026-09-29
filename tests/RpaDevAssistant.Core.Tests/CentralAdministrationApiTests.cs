@@ -205,6 +205,45 @@ public sealed class CentralAdministrationApiTests
         }
     }
 
+    [Fact]
+    public async Task CentralReport_AppliesTenantBrandingAndRegisteredProjectProfile()
+    {
+        var storageRoot = Path.Combine(Path.GetTempPath(), $"RpaDevAssistantCentralApi-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(storageRoot);
+        try
+        {
+            using var factory = CreateFactory(storageRoot);
+            using var bootstrap = Client(factory, BootstrapKey);
+            await bootstrap.PostAsJsonAsync("/api/central/tenants", new
+            {
+                id = "tenant-a", name = "Tenant A", brandingName = "Acme Automation", brandingAccentColor = "#123456"
+            });
+            await bootstrap.PostAsJsonAsync("/api/central/projects", new
+            {
+                id = "project-a", tenantId = "tenant-a", name = "Validation Project", projectPath = FixturePath(), ruleProfileId = "default"
+            });
+
+            var response = await bootstrap.PostAsJsonAsync("/api/central/projects/project-a/report", new { format = "html", locale = "en" });
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal("text/html", response.Content.Headers.ContentType?.MediaType);
+            var html = await response.Content.ReadAsStringAsync();
+            Assert.Contains("Acme Automation", html, StringComparison.Ordinal);
+            Assert.Contains("#123456", html, StringComparison.OrdinalIgnoreCase);
+
+            var historyResponse = await bootstrap.GetAsync("/api/central/history?tenantId=tenant-a&projectId=project-a");
+            Assert.Equal(HttpStatusCode.OK, historyResponse.StatusCode);
+            using var historyJson = JsonDocument.Parse(await historyResponse.Content.ReadAsStringAsync());
+            var analysis = Assert.Single(historyJson.RootElement.GetProperty("analyses").EnumerateArray());
+            Assert.Equal("Completed", analysis.GetProperty("status").GetString());
+            Assert.Equal("default", analysis.GetProperty("profileId").GetString());
+        }
+        finally
+        {
+            Directory.Delete(storageRoot, recursive: true);
+        }
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(string storageRoot) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {

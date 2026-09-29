@@ -4,6 +4,9 @@ using RpaDevAssistant.Api.Services;
 using RpaDevAssistant.Core.Central;
 using RpaDevAssistant.Core.Analysis;
 using RpaDevAssistant.Core.Analysis.Profiles;
+using RpaDevAssistant.Core.Reporting;
+using RpaDevAssistant.Core.Reporting.Export;
+using System.Text;
 
 namespace RpaDevAssistant.Api.Controllers;
 
@@ -14,7 +17,9 @@ public sealed class CentralAdministrationController(
     ICentralCatalogRepository repository,
     IUiPathProjectAnalyzer projectAnalyzer,
     IUiPathRuleProfileProvider profileProvider,
-    ICentralLicenseService licenseService) : ControllerBase
+    ICentralLicenseService licenseService,
+    IUiPathAnalysisReportService reportService,
+    IUiPathReportExportService reportExportService) : ControllerBase
 {
     [HttpGet("status")]
     public IActionResult Status() => Ok(new { enabled = options.Enabled, authentication = options.Enabled ? options.AuthenticationMode.ToString() : "None", license = licenseService.GetStatus() });
@@ -232,6 +237,65 @@ public sealed class CentralAdministrationController(
         return Ok(new { analyses });
     }
 
+    [HttpPost("projects/{projectId}/report")]
+    public async Task<IActionResult> ExportProjectReport(string projectId, [FromBody] CentralReportRequest request, CancellationToken cancellationToken)
+    {
+        var principal = RequireRole(CentralRole.Developer);
+        var snapshot = repository.GetSnapshot();
+        var project = ResolveVisibleProject(snapshot, principal, projectId);
+        if (project is null) return NotFound(new { error = "PROJECT_NOT_FOUND" });
+        if (!Enum.TryParse<UiPathReportExportFormat>(request.Format, true, out var format))
+            return BadRequest(new { error = "format must be json, html, or pdf." });
+        var tenant = snapshot.Tenants.First(item => item.Id == project.TenantId);
+        var reservation = repository.ReserveAnalysis(
+            project.TenantId,
+            project.Id,
+            principal.UserId,
+            project.TeamId,
+            project.RuleProfileId,
+            tenant.MonthlyAnalysisQuota);
+
+        try
+        {
+            var tenantProfile = repository.GetRuleProfiles(project.TenantId)
+                .FirstOrDefault(item => item.Profile.Id.Equals(project.RuleProfileId, StringComparison.OrdinalIgnoreCase))?.Profile;
+            var report = await reportService.GenerateAsync(new UiPathReportGenerationOptions
+            {
+                ProjectPath = project.ProjectPath,
+                ProfileId = project.RuleProfileId,
+                Profile = tenantProfile,
+                Locale = request.Locale,
+                Branding = new UiPathReportBranding
+                {
+                    CompanyName = tenant.BrandingName ?? tenant.Name,
+                    AccentColor = tenant.BrandingAccentColor
+                }
+            }, cancellationToken);
+            var export = reportExportService.Export(report, format, request.Locale);
+            var completed = repository.CompleteAnalysis(reservation with
+            {
+                Score = report.QualityScore,
+                Grade = report.Grade,
+                WorkflowCount = report.WorkflowCount,
+                ActivityCount = report.TotalActivityCount,
+                FindingCount = report.Summary.TotalFindings,
+                CriticalCount = report.Summary.CriticalCount,
+                ErrorCount = report.Summary.ErrorCount,
+                WarningCount = report.Summary.WarningCount,
+                SuggestionCount = report.Summary.SuggestionCount
+            });
+            Audit(principal, project.TenantId, "Analysis.Complete", "Analysis", completed.Id);
+            Audit(principal, project.TenantId, "Report.Export", "Project", project.Id);
+            return File(Encoding.UTF8.GetBytes(export.Content), export.ContentType, export.FileName);
+        }
+        catch
+        {
+            repository.FailAnalysis(reservation.Id, "REPORT_GENERATION_FAILED");
+            Audit(principal, project.TenantId, "Report.Export.Fail", "Analysis", reservation.Id, "Failed");
+            throw;
+        }
+    }
+
     [HttpGet("dashboard")]
     public IActionResult Dashboard([FromQuery] string? tenantId)
     {
@@ -322,7 +386,7 @@ public sealed class CentralAdministrationController(
         catch (UnknownRuleProfileException) { throw new ArgumentException($"Rule profile '{profileId}' does not exist for this tenant."); }
     }
 
-    private void Audit(CentralPrincipal principal, string tenantId, string action, string resourceType, string resourceId) =>
+    private void Audit(CentralPrincipal principal, string tenantId, string action, string resourceType, string resourceId, string outcome = "Success") =>
         repository.AppendAudit(new CentralAuditEvent
         {
             OperationId = Guid.NewGuid().ToString("N"),
@@ -331,13 +395,15 @@ public sealed class CentralAdministrationController(
             ActorUserId = principal.UserId,
             Action = action,
             ResourceType = resourceType,
-            ResourceId = resourceId
+            ResourceId = resourceId,
+            Outcome = outcome
         });
 
     public sealed record SaveTenantRequest(string Id, string Name, bool Active = true, CentralSubscriptionPlan Plan = CentralSubscriptionPlan.Internal, int MonthlyAnalysisQuota = 1_000, string? BrandingName = null, string? BrandingAccentColor = null, string? ExternalIdentityId = null, DateTimeOffset? CreatedAtUtc = null);
     public sealed record SaveUserRequest(string Id, string TenantId, string Email, string DisplayName, CentralRole Role, bool Active = true, IReadOnlyList<string>? TeamIds = null, string? ExternalSubject = null, DateTimeOffset? CreatedAtUtc = null);
     public sealed record SaveTeamRequest(string Id, string TenantId, string Name, IReadOnlyList<string>? MemberUserIds = null, DateTimeOffset? CreatedAtUtc = null);
     public sealed record SaveProjectRequest(string Id, string TenantId, string Name, string ProjectPath, string? RuleProfileId = null, string? TeamId = null, bool Active = true, DateTimeOffset? CreatedAtUtc = null);
+    public sealed record CentralReportRequest(string Format = "html", string Locale = "en");
 }
 
 public sealed class CentralAccessDeniedException : Exception;

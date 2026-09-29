@@ -854,7 +854,7 @@ export function App() {
           )}
 
           {activeTab === 'central' ? (
-            <CentralAdminView enabled={centralStatus.enabled} authentication={centralStatus.authentication} license={centralStatus.license} t={t} onBrandingChange={setTenantBranding} />
+            <CentralAdminView enabled={centralStatus.enabled} authentication={centralStatus.authentication} license={centralStatus.license} locale={language} t={t} onBrandingChange={setTenantBranding} />
           ) : activeTab === 'settings' ? (
             <SettingsView
               section={settingsSection}
