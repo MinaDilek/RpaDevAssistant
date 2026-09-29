@@ -168,6 +168,7 @@ public sealed record RpaDevAssistantRuntimeConfiguration
             OidcAudience = oidcAudience,
             TenantClaim = NullIfWhiteSpace(configuration["RpaDevAssistant:Central:Authentication:TenantClaim"]) ?? "tid",
             SubjectClaim = NullIfWhiteSpace(configuration["RpaDevAssistant:Central:Authentication:SubjectClaim"]) ?? "sub",
+            AuditRetentionDays = PositiveInt(configuration["RpaDevAssistant:Central:AuditRetentionDays"], 2_555, "Central:AuditRetentionDays"),
             LicenseRequired = BooleanValue(configuration["RpaDevAssistant:Central:License:Required"], false, "Central:License:Required"),
             LicenseFile = NullIfWhiteSpace(configuration["RpaDevAssistant:Central:License:File"]),
             LicensePublicKeyFile = NullIfWhiteSpace(configuration["RpaDevAssistant:Central:License:PublicKeyFile"])
@@ -244,6 +245,7 @@ public sealed record RpaDevAssistantCentralOptions
     public string? OidcAudience { get; init; }
     public string TenantClaim { get; init; } = "tid";
     public string SubjectClaim { get; init; } = "sub";
+    public int AuditRetentionDays { get; init; } = 2_555;
     public bool LicenseRequired { get; init; }
     public string? LicenseFile { get; init; }
     public string? LicensePublicKeyFile { get; init; }

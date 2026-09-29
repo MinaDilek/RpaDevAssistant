@@ -4,7 +4,8 @@
 
 - Added tenant-isolated central catalog, roles, API key/OIDC authentication, governed project analysis, quotas, rule profiles, history, quality metrics, and a functional TR/EN Company Workspace UI.
 - Central credentials remain session-memory only; user API keys are shown once and persisted only as SHA-256 hashes.
-- Added append-only tamper-evident audit chaining and tenant-scoped integrity export.
+- Added tamper-evident audit chaining and tenant-scoped integrity export.
+- Added configurable central audit retention with atomic pruning and terminal-hash retention checkpoints; tampered chains remain fail-closed and are never pruned.
 - Added optional RSA-PSS/SHA-256 offline licensing with expiry, plan, active-tenant, and monthly-analysis entitlement enforcement plus an operator-side issuer utility.
 - Added a non-root, single-origin on-prem container/Compose package with read-only project mounts and persistent application data.
 - Added tenant-branded central report export using the registered project and exact tenant profile; report analysis is role- and quota-governed and recorded in central history.

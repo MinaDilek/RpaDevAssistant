@@ -99,6 +99,31 @@ public sealed class CentralCatalogTests
     }
 
     [Fact]
+    public void Catalog_AuditRetentionRemovesExpiredEventsAndPreservesVerifiableCheckpoint()
+    {
+        using var directory = new TemporaryDirectory();
+        var options = new CentralCatalogOptions { StorageRoot = directory.Path, AuditRetentionDays = 30 };
+        var repository = new FileCentralCatalogRepository(options);
+        repository.AppendAudit(Audit("tenant-a", "expired", DateTimeOffset.UtcNow.AddDays(-31)));
+
+        repository.AppendAudit(Audit("tenant-a", "current", DateTimeOffset.UtcNow));
+
+        var events = repository.GetAuditEvents("tenant-a");
+        var integrity = repository.VerifyAuditIntegrity();
+        Assert.Single(events);
+        Assert.Equal("current", events[0].ResourceId);
+        Assert.True(integrity.Valid);
+        Assert.Equal(2, integrity.EventCount);
+        var persisted = File.ReadAllText(System.IO.Path.Combine(directory.Path, "audit.jsonl"));
+        Assert.DoesNotContain("expired", persisted, StringComparison.Ordinal);
+        Assert.Contains("Audit.RetentionCheckpoint", persisted, StringComparison.Ordinal);
+
+        var reloaded = new FileCentralCatalogRepository(options);
+        Assert.True(reloaded.VerifyAuditIntegrity().Valid);
+        Assert.Single(reloaded.GetAuditEvents("tenant-a"));
+    }
+
+    [Fact]
     public void Catalog_SynchronizesTeamMembershipAndRejectsCrossTenantProjectPaths()
     {
         using var directory = new TemporaryDirectory();

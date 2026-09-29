@@ -236,7 +236,7 @@ Kurallar:
 - [ ] Subscription modeli — Kısmi: Internal, Trial, Team ve Enterprise planı, imzalı entitlement süresi ve quota enforcement hazır; ödeme/billing sağlayıcısı, renewal ve invoice lifecycle yok.
 - [x] Kullanım kotası — Aylık tenant analiz rezervasyonu atomik olarak sayılır, limit öncesi uygulanır ve dashboard’da kullanım/limit birlikte raporlanır.
 - [ ] Enterprise SSO — Kısmi: OIDC JWT ve provision edilmiş federated subject/tenant mapping hazır; Entra ID/Okta canlı kabul testi ve provisioning otomasyonu bekliyor.
-- [ ] Audit / compliance — Kısmi: Tenant-scoped append-only SHA-256 hash chain, fail-closed tamper detection ve schema-versioned export hazır; kurumsal retention policy ve bağımsız compliance kabulü bekliyor.
+- [x] Audit / compliance — Tenant-scoped SHA-256 hash chain, fail-closed tamper detection, schema-versioned export ve varsayılan yedi yıllık yapılandırılabilir retention uygulanır. Süresi dolan olaylar atomik olarak kaldırılırken önceki terminal hash ve kaldırılan kayıt sayısı doğrulanabilir retention checkpoint’inde korunur; harici sertifikasyon ürün kapsamı dışındaki organizasyonel kabul adımıdır.
 - [x] Customer admin panel — Merkezi çalışma alanı tenant, branding, kullanıcı/rol, tek-seferlik API key, ekip, proje, rule profile, quota/dashboard, history ve audit yönetimini mevcut yetki contract’ıyla sunar.
 - [x] On-premise seçeneği — Tek instance container/Compose paketi, güvenli deployment runbook’u, reverse-proxy TLS örneği ve GitHub Actions run `36583280992` üzerinde gerçek Docker image/health/frontend/central-mode kabulü tamamlandı.
 - [ ] SaaS seçeneği
@@ -305,9 +305,9 @@ Kurallar:
 
 **Son inceleme tarihi:** 2026-09-29
 **İnceleyen:** Codex
-**Tamamlanan madde sayısı:** 217
-**Kısmi madde sayısı:** 6
-**Bekleyen madde sayısı:** 7
+**Tamamlanan madde sayısı:** 218
+**Kısmi madde sayısı:** 5
+**Bekleyen madde sayısı:** 6
 
 ### Notlar
 

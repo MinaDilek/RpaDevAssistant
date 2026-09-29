@@ -48,7 +48,11 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSingleton(runtimeConfiguration.FeatureFlags);
 builder.Services.AddSingleton(runtimeConfiguration.Diagnostics);
 builder.Services.AddSingleton(runtimeConfiguration.Central);
-builder.Services.AddSingleton(new CentralCatalogOptions { StorageRoot = runtimeConfiguration.Central.StorageRoot });
+builder.Services.AddSingleton(new CentralCatalogOptions
+{
+    StorageRoot = runtimeConfiguration.Central.StorageRoot,
+    AuditRetentionDays = runtimeConfiguration.Central.AuditRetentionDays
+});
 builder.Services.AddSingleton<ICentralCatalogRepository, FileCentralCatalogRepository>();
 builder.Services.AddSingleton(new CentralLicenseOptions
 {

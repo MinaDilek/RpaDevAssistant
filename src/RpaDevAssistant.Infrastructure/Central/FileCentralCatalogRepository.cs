@@ -10,6 +10,7 @@ namespace RpaDevAssistant.Infrastructure.Central;
 public sealed record CentralCatalogOptions
 {
     public required string StorageRoot { get; init; }
+    public int AuditRetentionDays { get; init; } = 2_555;
 }
 
 public sealed class FileCentralCatalogRepository : ICentralCatalogRepository
@@ -24,6 +25,7 @@ public sealed class FileCentralCatalogRepository : ICentralCatalogRepository
     private readonly object sync = new();
     private readonly string catalogPath;
     private readonly string auditPath;
+    private readonly int auditRetentionDays;
 
     public FileCentralCatalogRepository(CentralCatalogOptions options)
     {
@@ -34,9 +36,11 @@ public sealed class FileCentralCatalogRepository : ICentralCatalogRepository
         }
 
         var root = Path.GetFullPath(options.StorageRoot);
+        if (options.AuditRetentionDays <= 0) throw new ArgumentOutOfRangeException(nameof(options.AuditRetentionDays));
         Directory.CreateDirectory(root);
         catalogPath = Path.Combine(root, "catalog.json");
         auditPath = Path.Combine(root, "audit.jsonl");
+        auditRetentionDays = options.AuditRetentionDays;
     }
 
     public CentralCatalogSnapshot GetSnapshot()
@@ -296,7 +300,7 @@ public sealed class FileCentralCatalogRepository : ICentralCatalogRepository
         ArgumentNullException.ThrowIfNull(auditEvent);
         lock (sync)
         {
-            var chain = ReadAuditChain();
+            var chain = ApplyAuditRetention(ReadAuditChain());
             if (!chain.Integrity.Valid) throw new InvalidDataException("The central audit chain failed integrity validation and was not modified.");
             var previousHash = chain.Integrity.LastHash ?? string.Empty;
             var envelope = new StoredAuditEnvelope
@@ -374,6 +378,51 @@ public sealed class FileCentralCatalogRepository : ICentralCatalogRepository
         return new AuditChain(events, new CentralAuditIntegrity(true, events.Count, legacyCount, previousHash.Length == 0 ? null : previousHash, null));
 
         AuditChain Invalid(string error) => new(events, new CentralAuditIntegrity(false, events.Count, legacyCount, previousHash.Length == 0 ? null : previousHash, error));
+    }
+
+    private AuditChain ApplyAuditRetention(AuditChain chain)
+    {
+        if (!chain.Integrity.Valid) return chain;
+        var cutoff = DateTimeOffset.UtcNow.AddDays(-auditRetentionDays);
+        var retained = chain.Events.Where(item => item.TimestampUtc >= cutoff).ToArray();
+        var removedCount = chain.Events.Count - retained.Length;
+        if (removedCount == 0) return chain;
+
+        var checkpoint = new CentralAuditEvent
+        {
+            OperationId = Guid.NewGuid().ToString("N"),
+            TimestampUtc = DateTimeOffset.UtcNow,
+            TenantId = "system",
+            ActorUserId = "retention",
+            Action = "Audit.RetentionCheckpoint",
+            ResourceType = "AuditChain",
+            ResourceId = chain.Integrity.LastHash ?? "empty",
+            Outcome = $"Removed:{removedCount}"
+        };
+        WriteAuditChain([checkpoint, .. retained]);
+        return ReadAuditChain();
+    }
+
+    private void WriteAuditChain(IReadOnlyList<CentralAuditEvent> events)
+    {
+        var previousHash = string.Empty;
+        var lines = new List<string>(events.Count);
+        foreach (var auditEvent in events)
+        {
+            var hash = AuditHash(previousHash, auditEvent);
+            lines.Add(JsonSerializer.Serialize(new StoredAuditEnvelope
+            {
+                Event = auditEvent,
+                PreviousHash = previousHash,
+                Hash = hash
+            }, AuditJsonOptions));
+            previousHash = hash;
+        }
+
+        var tempPath = auditPath + $".{Guid.NewGuid():N}.tmp";
+        File.WriteAllText(tempPath, string.Join(Environment.NewLine, lines) + Environment.NewLine, new UTF8Encoding(false));
+        try { File.Move(tempPath, auditPath, overwrite: true); }
+        finally { if (File.Exists(tempPath)) File.Delete(tempPath); }
     }
 
     private static string AuditHash(string previousHash, CentralAuditEvent auditEvent)
