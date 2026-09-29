@@ -12,6 +12,8 @@ services:
       RpaDevAssistant__Central__Authentication__Mode: ${RPADA_AUTH_MODE:-ApiKey}
       RpaDevAssistant__Central__Authentication__OidcAuthority: ${RPADA_OIDC_AUTHORITY:-}
       RpaDevAssistant__Central__Authentication__OidcAudience: ${RPADA_OIDC_AUDIENCE:-}
+      RpaDevAssistant__Central__Authentication__TenantClaim: ${RPADA_OIDC_TENANT_CLAIM:-tid}
+      RpaDevAssistant__Central__Authentication__SubjectClaim: ${RPADA_OIDC_SUBJECT_CLAIM:-sub}
       RpaDevAssistant__Central__License__Required: ${RPADA_LICENSE_REQUIRED:-false}
       RpaDevAssistant__Central__License__File: ${RPADA_LICENSE_FILE:-}
       RpaDevAssistant__Central__License__PublicKeyFile: ${RPADA_LICENSE_PUBLIC_KEY_FILE:-}

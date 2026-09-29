@@ -9,6 +9,6 @@ This deployment packages the React UI and .NET 8 API into one non-root container
 
 The default binding is loopback-only. For company network access, terminate TLS in an approved reverse proxy and set `RPADA_ALLOWED_ORIGIN` to its HTTPS origin. Do not expose the container directly to the internet. Back up the named data volume and retain the one-time user API keys in the company secret manager.
 
-OIDC can be selected with `RPADA_AUTH_MODE=Oidc` or `Hybrid`; both authority and audience are then mandatory and the authority must use HTTPS. OIDC users must first be provisioned in the central catalog with their provider subject and tenant mapping.
+OIDC can be selected with `RPADA_AUTH_MODE=Oidc` or `Hybrid`; both authority and audience are then mandatory and the authority must use HTTPS. `RPADA_OIDC_TENANT_CLAIM` and `RPADA_OIDC_SUBJECT_CLAIM` map provider-specific claims and default to `tid` and `sub`. OIDC users must first be provisioned in the central catalog with their provider subject and tenant mapping.
 
 Commercial/offline deployments can set `RPADA_LICENSE_REQUIRED=true` and mount a signed `license.json` plus the vendor public key under `/licenses`. The API verifies RSA-PSS/SHA-256 signatures, expiry, maximum active tenants, plan level, and monthly quota before allowing central operations. The private signing key must never be deployed with the application. Vendor operators can issue a license with `node scripts/issue-central-license.mjs --private-key=... --output=... --license-id=... --customer-id=... --expires=...`.

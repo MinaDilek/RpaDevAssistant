@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   validate:
@@ -25,10 +26,12 @@ jobs:
       - name: Configure isolated deployment
         shell: bash
         run: |
+          bootstrap_key=$(openssl rand -base64 48)
+          printf '%s' "$bootstrap_key" > /tmp/rpada-bootstrap-key
           cat > deploy/onprem/.env <<EOF
           RPADA_PORT=18080
           RPADA_PROJECTS_ROOT=${GITHUB_WORKSPACE}/samples
-          RPADA_CENTRAL_BOOTSTRAP_API_KEY=$(openssl rand -base64 48)
+          RPADA_CENTRAL_BOOTSTRAP_API_KEY=$bootstrap_key
           RPADA_AUTH_MODE=ApiKey
           RPADA_ALLOWED_ORIGIN=http://127.0.0.1:18080
           RPADA_LICENSE_REQUIRED=false
@@ -49,6 +52,66 @@ jobs:
           curl --fail --silent http://127.0.0.1:18080/ | grep -q '<div id="root"></div>'
           curl --fail --silent http://127.0.0.1:18080/api/central/status | grep -q '"enabled":true'
           test "$(docker inspect --format='{{.Config.User}}' onprem-rpadevassistant-1)" = "app"
+
+      - name: Validate live OIDC authentication and tenant mapping
+        shell: bash
+        run: |
+          set -euo pipefail
+          audience="rpa-dev-assistant-ci"
+          token_response=$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${audience}")
+          token=$(printf '%s' "$token_response" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')
+          claims=$(TOKEN="$token" python3 - <<'PY'
+          import base64, json, os
+          payload = os.environ["TOKEN"].split(".")[1]
+          payload += "=" * (-len(payload) % 4)
+          claims = json.loads(base64.urlsafe_b64decode(payload))
+          print(json.dumps({"repository": claims["repository"], "sub": claims["sub"]}))
+          PY
+          )
+          external_tenant=$(printf '%s' "$claims" | python3 -c 'import json,sys; print(json.load(sys.stdin)["repository"])')
+          external_subject=$(printf '%s' "$claims" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sub"])')
+          bootstrap_key=$(cat /tmp/rpada-bootstrap-key)
+
+          sed -i 's/^RPADA_AUTH_MODE=.*/RPADA_AUTH_MODE=Oidc/' deploy/onprem/.env
+          cat >> deploy/onprem/.env <<EOF
+          RPADA_OIDC_AUTHORITY=https://token.actions.githubusercontent.com
+          RPADA_OIDC_AUDIENCE=${audience}
+          RPADA_OIDC_TENANT_CLAIM=repository
+          RPADA_OIDC_SUBJECT_CLAIM=sub
+          EOF
+          docker compose --env-file deploy/onprem/.env -f deploy/onprem/compose.yaml up -d --force-recreate
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:18080/api/health >/dev/null; then break; fi
+            sleep 2
+          done
+
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${bootstrap_key}" \
+            -H 'Content-Type: application/json' \
+            --data "$(jq -nc --arg external "$external_tenant" '{id:"oidc-ci",name:"OIDC CI",externalIdentityId:$external}')" \
+            http://127.0.0.1:18080/api/central/tenants >/tmp/oidc-tenant.json
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${bootstrap_key}" \
+            -H 'Content-Type: application/json' \
+            --data "$(jq -nc --arg subject "$external_subject" '{id:"oidc-user",tenantId:"oidc-ci",email:"oidc-ci@example.invalid",displayName:"OIDC CI",role:"TenantAdmin",externalSubject:$subject}')" \
+            http://127.0.0.1:18080/api/central/users >/tmp/oidc-user.json
+
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${token}" \
+            http://127.0.0.1:18080/api/central/catalog >/tmp/oidc-catalog.json
+          jq -e '.tenants | length == 1 and .[0].id == "oidc-ci"' /tmp/oidc-catalog.json >/dev/null
+          jq -e '.users | length == 1 and .[0].id == "oidc-user"' /tmp/oidc-catalog.json >/dev/null
+
+          wrong_audience_response=$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=wrong-audience")
+          wrong_audience_token=$(printf '%s' "$wrong_audience_response" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')
+          status=$(curl --silent --output /tmp/oidc-rejected.json --write-out '%{http_code}' \
+            -H "Authorization: Bearer ${wrong_audience_token}" \
+            http://127.0.0.1:18080/api/central/catalog)
+          test "$status" = "401"
 
       - name: Show logs on failure
         if: failure()
