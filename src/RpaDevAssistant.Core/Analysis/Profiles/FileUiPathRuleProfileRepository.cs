@@ -29,7 +29,7 @@ public sealed class FileUiPathRuleProfileRepository : IUiPathRuleProfileReposito
 
     public UiPathRuleProfile SaveProfile(UiPathRuleProfile profile)
     {
-        var validation = Validate(profile);
+        var validation = UiPathRuleProfileValidation.Validate(profile);
         if (validation.Count > 0)
         {
             throw new UiPathRuleProfileValidationException(validation);
@@ -49,45 +49,6 @@ public sealed class FileUiPathRuleProfileRepository : IUiPathRuleProfileReposito
     public UiPathRuleProfileStore ExportProfiles()
     {
         return LoadStore();
-    }
-
-    private static IReadOnlyList<string> Validate(UiPathRuleProfile profile)
-    {
-        var errors = new List<string>();
-        if (string.IsNullOrWhiteSpace(profile.Id))
-        {
-            errors.Add("Profile id is required.");
-        }
-
-        if (profile.Id.Equals(BuiltInUiPathRuleProfileProvider.DefaultProfileId, StringComparison.OrdinalIgnoreCase))
-        {
-            errors.Add("The built-in default profile cannot be overwritten.");
-        }
-
-        if (string.IsNullOrWhiteSpace(profile.Name))
-        {
-            errors.Add("Profile name is required.");
-        }
-
-        foreach (var rule in profile.Rules)
-        {
-            if (string.IsNullOrWhiteSpace(rule.RuleId))
-            {
-                errors.Add("RuleId is required for every profile rule.");
-            }
-
-            if (rule.Weight < 0)
-            {
-                errors.Add($"{rule.RuleId}: Weight cannot be negative.");
-            }
-
-            if (rule.MaxPenalty < 0)
-            {
-                errors.Add($"{rule.RuleId}: MaxPenalty cannot be negative.");
-            }
-        }
-
-        return errors;
     }
 
     private UiPathRuleProfileStore LoadStore()

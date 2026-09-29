@@ -1,0 +1,16 @@
+.git
+.github
+.dotnet
+.env.local
+**/bin
+**/obj
+**/node_modules
+frontend/dist
+frontend/src-tauri/target
+frontend/src-tauri/bin
+artifacts
+output
+tmp
+tests
+samples
+*.log

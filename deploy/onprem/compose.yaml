@@ -1,0 +1,29 @@
+services:
+  rpadevassistant:
+    build:
+      context: ../..
+      dockerfile: deploy/onprem/Dockerfile
+    image: rpadevassistant:onprem-0.1.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${RPADA_PORT:-8080}:8080"
+    environment:
+      RpaDevAssistant__Central__BootstrapApiKey: ${RPADA_CENTRAL_BOOTSTRAP_API_KEY:?Set a random value containing at least 32 characters}
+      RpaDevAssistant__Central__Authentication__Mode: ${RPADA_AUTH_MODE:-ApiKey}
+      RpaDevAssistant__Central__Authentication__OidcAuthority: ${RPADA_OIDC_AUTHORITY:-}
+      RpaDevAssistant__Central__Authentication__OidcAudience: ${RPADA_OIDC_AUDIENCE:-}
+      RpaDevAssistant__Central__License__Required: ${RPADA_LICENSE_REQUIRED:-false}
+      RpaDevAssistant__Central__License__File: ${RPADA_LICENSE_FILE:-}
+      RpaDevAssistant__Central__License__PublicKeyFile: ${RPADA_LICENSE_PUBLIC_KEY_FILE:-}
+      RpaDevAssistant__AllowedOrigins__0: ${RPADA_ALLOWED_ORIGIN:-http://127.0.0.1:8080}
+    volumes:
+      - rpada-data:/data
+      - ${RPADA_PROJECTS_ROOT:?Set the host folder containing governed UiPath projects}:/projects:ro
+      - ${RPADA_LICENSES_ROOT:-./licenses}:/licenses:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  rpada-data:

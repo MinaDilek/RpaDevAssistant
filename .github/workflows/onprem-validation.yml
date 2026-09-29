@@ -1,0 +1,59 @@
+name: On-premise Container Validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "codex/backlog-completion-*"
+    paths:
+      - "deploy/onprem/**"
+      - ".dockerignore"
+      - "frontend/**"
+      - "src/**"
+      - "package*.json"
+      - ".github/workflows/onprem-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure isolated deployment
+        shell: bash
+        run: |
+          cat > deploy/onprem/.env <<EOF
+          RPADA_PORT=18080
+          RPADA_PROJECTS_ROOT=${GITHUB_WORKSPACE}/samples
+          RPADA_CENTRAL_BOOTSTRAP_API_KEY=$(openssl rand -base64 48)
+          RPADA_AUTH_MODE=ApiKey
+          RPADA_ALLOWED_ORIGIN=http://127.0.0.1:18080
+          RPADA_LICENSE_REQUIRED=false
+          EOF
+          mkdir -p deploy/onprem/licenses
+
+      - name: Build and start on-premise image
+        run: docker compose --env-file deploy/onprem/.env -f deploy/onprem/compose.yaml up --build -d
+
+      - name: Validate health, frontend, and central mode
+        shell: bash
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:18080/api/health > /tmp/health.json; then break; fi
+            sleep 2
+          done
+          grep -q '"status":"ok"' /tmp/health.json
+          curl --fail --silent http://127.0.0.1:18080/ | grep -q '<div id="root"></div>'
+          curl --fail --silent http://127.0.0.1:18080/api/central/status | grep -q '"enabled":true'
+          test "$(docker inspect --format='{{.Config.User}}' onprem-rpadevassistant-1)" = "app"
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose --env-file deploy/onprem/.env -f deploy/onprem/compose.yaml logs
+
+      - name: Stop deployment
+        if: always()
+        run: docker compose --env-file deploy/onprem/.env -f deploy/onprem/compose.yaml down --volumes

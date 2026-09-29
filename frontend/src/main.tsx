@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Bell,
   Bot,
+  Building2,
   ChevronDown,
   CircleHelp,
   ClipboardCheck,
@@ -84,6 +85,9 @@ import { SettingsView } from './components/SettingsView';
 import { ReportView, ReportCreateDialog } from './components/ReportView';
 import { ProcessPddAnalysisView } from './components/ProcessPddAnalysisView';
 import { OrchestratorView } from './components/OrchestratorView';
+import { CentralAdminView } from './components/CentralAdminView';
+import { getCentralStatus } from './services/centralService';
+import type { CentralStatus } from './services/centralService';
 import {
   type ActiveTab,
   type HealthState,
@@ -162,6 +166,8 @@ export function App() {
   const [ruleStatus, setRuleStatus] = React.useState('');
   const [ruleNotification, setRuleNotification] = React.useState<{ id: number; message: string } | null>(null);
   const [profiles, setProfiles] = React.useState<RuleProfile[]>([]);
+  const [centralStatus, setCentralStatus] = React.useState<CentralStatus>({ enabled: false, authentication: 'None' });
+  const [tenantBranding, setTenantBranding] = React.useState<{ name: string; accentColor: string } | null>(null);
 
   const desktop = isTauriDesktop();
   const t = React.useCallback((key: string, values?: Record<string, unknown>) => translate(language, key, values), [language]);
@@ -217,6 +223,11 @@ export function App() {
   }, [refreshHealth]);
 
   React.useEffect(() => {
+    if (healthState !== 'ready') return;
+    void getCentralStatus().then(setCentralStatus).catch(() => setCentralStatus({ enabled: false, authentication: 'None' }));
+  }, [healthState]);
+
+  React.useEffect(() => {
     if (!desktop) return;
     void refreshDesktopUpdate();
   }, [desktop]);
@@ -225,6 +236,11 @@ export function App() {
     safeStoreLocale(language);
     setApiLocale(language);
   }, [language]);
+
+  React.useEffect(() => {
+    document.documentElement.style.setProperty('--brand-accent', tenantBranding?.accentColor ?? '#2563eb');
+    document.title = tenantBranding?.name ? `${tenantBranding.name} · RPA Dev Assistant` : 'RPA Dev Assistant';
+  }, [tenantBranding]);
 
   React.useEffect(() => {
     void refreshRules();
@@ -675,6 +691,7 @@ export function App() {
     { label: t('orchestrator'), tab: 'orchestrator', icon: Cloud },
     { label: t('reports'), tab: 'report', icon: FileJson },
     { label: t('reviewHistory'), tab: 'history', icon: History },
+    ...(centralStatus.enabled ? [{ label: t('centralWorkspace'), tab: 'central' as ActiveTab, icon: Building2 }] : []),
   ];
 
   return (
@@ -682,7 +699,7 @@ export function App() {
       <aside className="sidebar" aria-label={t('primaryNavigation')}>
         <div className="brand-lockup">
           <span className="brand-mark"><Bot size={18} /></span>
-          <strong>RPA Dev Assistant</strong>
+          <strong>{tenantBranding?.name ?? 'RPA Dev Assistant'}</strong>
         </div>
         <nav className="sidebar-nav">
           {navigationItems.map((item) => {
@@ -714,8 +731,8 @@ export function App() {
       <section className="main-area">
         <header className="top-bar">
           <div>
-            <h1>{activeTab === 'config' ? t('configAnalysis') : activeTab === 'rules' ? t('rules') : activeTab === 'flowchartConverter' ? t('flowchartConverter') : activeTab === 'processPdd' ? t('processPddTitle') : activeTab === 'orchestrator' ? t('orchestrator') : analysis ? analysis.projectName ?? t('projectOverview') : t('dashboard')}</h1>
-            <p>{activeTab === 'config' ? t('configIntelligenceHelp') : activeTab === 'rules' ? t('rulesWorkspaceHelp') : activeTab === 'flowchartConverter' ? t('flowchartConverterHelp') : activeTab === 'processPdd' ? t('processPddHelp') : activeTab === 'orchestrator' ? t('orchestratorHelp') : analysis ? t('projectWorkspace') : t('homeSubtitle')}</p>
+            <h1>{activeTab === 'central' ? t('centralWorkspace') : activeTab === 'config' ? t('configAnalysis') : activeTab === 'rules' ? t('rules') : activeTab === 'flowchartConverter' ? t('flowchartConverter') : activeTab === 'processPdd' ? t('processPddTitle') : activeTab === 'orchestrator' ? t('orchestrator') : analysis ? analysis.projectName ?? t('projectOverview') : t('dashboard')}</h1>
+            <p>{activeTab === 'central' ? t('centralWorkspaceHelp') : activeTab === 'config' ? t('configIntelligenceHelp') : activeTab === 'rules' ? t('rulesWorkspaceHelp') : activeTab === 'flowchartConverter' ? t('flowchartConverterHelp') : activeTab === 'processPdd' ? t('processPddHelp') : activeTab === 'orchestrator' ? t('orchestratorHelp') : analysis ? t('projectWorkspace') : t('homeSubtitle')}</p>
           </div>
           <div className="top-actions">
             <input aria-label="Global search" placeholder={t('globalSearch')} />
@@ -763,7 +780,7 @@ export function App() {
         )}
 
         <section className="workspace">
-          {activeTab !== 'rules' && activeTab !== 'flowchartConverter' && activeTab !== 'processPdd' && activeTab !== 'orchestrator' && (
+          {activeTab !== 'rules' && activeTab !== 'flowchartConverter' && activeTab !== 'processPdd' && activeTab !== 'orchestrator' && activeTab !== 'central' && (
             <section className={`project-card${activeTab === 'config' ? ' config-project-card' : ''}`} aria-label="Project intake">
               <div className="project-card-header">
                 <div>
@@ -836,7 +853,9 @@ export function App() {
             </section>
           )}
 
-          {activeTab === 'settings' ? (
+          {activeTab === 'central' ? (
+            <CentralAdminView enabled={centralStatus.enabled} authentication={centralStatus.authentication} license={centralStatus.license} t={t} onBrandingChange={setTenantBranding} />
+          ) : activeTab === 'settings' ? (
             <SettingsView
               section={settingsSection}
               language={language}

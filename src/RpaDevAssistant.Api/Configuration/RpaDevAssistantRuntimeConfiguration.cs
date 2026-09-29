@@ -2,6 +2,7 @@ using RpaDevAssistant.Core.Dependencies;
 using RpaDevAssistant.Infrastructure.Orchestrator;
 using RpaDevAssistant.Core.SourceControl;
 using RpaDevAssistant.Infrastructure.SourceControl;
+using RpaDevAssistant.Infrastructure.Central;
 
 namespace RpaDevAssistant.Api.Configuration;
 
@@ -26,6 +27,8 @@ public sealed record RpaDevAssistantRuntimeConfiguration
     public UiPathOrchestratorOptions Orchestrator { get; init; } = new();
 
     public UiPathSourceControlOptions SourceControl { get; init; } = new();
+
+    public RpaDevAssistantCentralOptions Central { get; init; } = new();
 
     public static RpaDevAssistantRuntimeConfiguration Load(IConfiguration configuration)
     {
@@ -67,6 +70,7 @@ public sealed record RpaDevAssistantRuntimeConfiguration
                 RequestTimeout = PositiveDuration(configuration["RpaDevAssistant:Orchestrator:RequestTimeoutSeconds"], 15, "Orchestrator:RequestTimeoutSeconds")
             },
             SourceControl = LoadSourceControl(configuration),
+            Central = LoadCentral(configuration),
             PackageMetadata = new NuGetPackageMetadataOptions
             {
                 NuGetServiceIndexUri = OfficialHttpsUri(configuration["RpaDevAssistant:PackageMetadata:NuGetServiceIndexUri"], "https://api.nuget.org/v3/index.json", "NuGetServiceIndexUri"),
@@ -137,6 +141,39 @@ public sealed record RpaDevAssistantRuntimeConfiguration
         }
     }
 
+    private static RpaDevAssistantCentralOptions LoadCentral(IConfiguration configuration)
+    {
+        var enabled = BooleanValue(configuration["RpaDevAssistant:Central:Enabled"], false, "Central:Enabled");
+        var storageRoot = NullIfWhiteSpace(configuration["RpaDevAssistant:Central:StorageRoot"])
+            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RpaDevAssistant", "central");
+        var bootstrapApiKey = NullIfWhiteSpace(configuration["RpaDevAssistant:Central:BootstrapApiKey"])
+            ?? NullIfWhiteSpace(Environment.GetEnvironmentVariable("RPADA_CENTRAL_BOOTSTRAP_API_KEY"));
+
+        if (enabled && (bootstrapApiKey is null || bootstrapApiKey.Length < 32))
+            throw new InvalidOperationException("Central:BootstrapApiKey must contain at least 32 characters when central mode is enabled.");
+        var authenticationMode = EnumValue(configuration["RpaDevAssistant:Central:Authentication:Mode"], CentralAuthenticationMode.ApiKey, "Central:Authentication:Mode");
+        var oidcAuthority = OptionalHttpsUri(configuration["RpaDevAssistant:Central:Authentication:OidcAuthority"], "Central:Authentication:OidcAuthority");
+        var oidcAudience = NullIfWhiteSpace(configuration["RpaDevAssistant:Central:Authentication:OidcAudience"]);
+        if (enabled && (authenticationMode is CentralAuthenticationMode.Oidc or CentralAuthenticationMode.Hybrid)
+            && (oidcAuthority is null || oidcAudience is null))
+            throw new InvalidOperationException("OIDC authority and audience are required for OIDC central authentication.");
+
+        return new RpaDevAssistantCentralOptions
+        {
+            Enabled = enabled,
+            StorageRoot = Path.GetFullPath(storageRoot),
+            BootstrapApiKey = bootstrapApiKey,
+            AuthenticationMode = authenticationMode,
+            OidcAuthority = oidcAuthority,
+            OidcAudience = oidcAudience,
+            TenantClaim = NullIfWhiteSpace(configuration["RpaDevAssistant:Central:Authentication:TenantClaim"]) ?? "tid",
+            SubjectClaim = NullIfWhiteSpace(configuration["RpaDevAssistant:Central:Authentication:SubjectClaim"]) ?? "sub",
+            LicenseRequired = BooleanValue(configuration["RpaDevAssistant:Central:License:Required"], false, "Central:License:Required"),
+            LicenseFile = NullIfWhiteSpace(configuration["RpaDevAssistant:Central:License:File"]),
+            LicensePublicKeyFile = NullIfWhiteSpace(configuration["RpaDevAssistant:Central:License:PublicKeyFile"])
+        };
+    }
+
     private static long? OptionalPositiveLong(string? value, string name)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
@@ -172,6 +209,13 @@ public sealed record RpaDevAssistantRuntimeConfiguration
         throw new InvalidOperationException($"{name} must be true or false.");
     }
 
+    private static T EnumValue<T>(string? value, T fallback, string name) where T : struct, Enum
+    {
+        if (string.IsNullOrWhiteSpace(value)) return fallback;
+        if (Enum.TryParse<T>(value, ignoreCase: true, out var parsed)) return parsed;
+        throw new InvalidOperationException($"{name} is invalid.");
+    }
+
     private static string? NullIfWhiteSpace(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 }
 
@@ -188,4 +232,26 @@ public sealed record RpaDevAssistantDiagnosticsOptions
     public bool TelemetryEnabled { get; init; }
     public bool CrashReportingEnabled { get; init; } = true;
     public string? StorageRoot { get; init; }
+}
+
+public sealed record RpaDevAssistantCentralOptions
+{
+    public bool Enabled { get; init; }
+    public string StorageRoot { get; init; } = string.Empty;
+    public string? BootstrapApiKey { get; init; }
+    public CentralAuthenticationMode AuthenticationMode { get; init; } = CentralAuthenticationMode.ApiKey;
+    public Uri? OidcAuthority { get; init; }
+    public string? OidcAudience { get; init; }
+    public string TenantClaim { get; init; } = "tid";
+    public string SubjectClaim { get; init; } = "sub";
+    public bool LicenseRequired { get; init; }
+    public string? LicenseFile { get; init; }
+    public string? LicensePublicKeyFile { get; init; }
+}
+
+public enum CentralAuthenticationMode
+{
+    ApiKey,
+    Oidc,
+    Hybrid
 }

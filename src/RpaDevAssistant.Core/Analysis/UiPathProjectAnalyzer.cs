@@ -54,6 +54,17 @@ public sealed class UiPathProjectAnalyzer : IUiPathProjectAnalyzer
         return AnalyzeScan(projectScan, profile, totalStopwatch);
     }
 
+    public async Task<UiPathProjectAnalysisResult> AnalyzeAsync(
+        string projectPath,
+        UiPathRuleProfile profile,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        var totalStopwatch = Stopwatch.StartNew();
+        var projectScan = await scanner.ScanAsync(projectPath, cancellationToken).ConfigureAwait(false);
+        return AnalyzeScan(projectScan, profile, totalStopwatch);
+    }
+
     private UiPathProjectAnalysisResult AnalyzeScan(
         ProjectScanResult projectScan,
         UiPathRuleProfile profile,
@@ -107,12 +118,10 @@ public sealed class UiPathProjectAnalyzer : IUiPathProjectAnalyzer
 
         var configurations = profile.Rules.ToDictionary(rule => rule.RuleId, StringComparer.OrdinalIgnoreCase);
         var effectiveRules = customRules
+            .Where(rule => configurations.ContainsKey(rule.Id))
             .Select(rule =>
             {
-                if (!configurations.TryGetValue(rule.Id, out var configuration))
-                {
-                    return rule;
-                }
+                var configuration = configurations[rule.Id];
 
                 return rule with
                 {

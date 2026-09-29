@@ -32,6 +32,10 @@ using RpaDevAssistant.Core.Config;
 using RpaDevAssistant.Core.Compatibility;
 using RpaDevAssistant.Core.ProcessUnderstanding;
 using RpaDevAssistant.Api.Services;
+using RpaDevAssistant.Core.Central;
+using RpaDevAssistant.Infrastructure.Central;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 
 DotEnvLoader.Load(Path.Combine(Directory.GetCurrentDirectory(), ".env.local"));
 
@@ -43,6 +47,36 @@ builder.Services.AddControllers()
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSingleton(runtimeConfiguration.FeatureFlags);
 builder.Services.AddSingleton(runtimeConfiguration.Diagnostics);
+builder.Services.AddSingleton(runtimeConfiguration.Central);
+builder.Services.AddSingleton(new CentralCatalogOptions { StorageRoot = runtimeConfiguration.Central.StorageRoot });
+builder.Services.AddSingleton<ICentralCatalogRepository, FileCentralCatalogRepository>();
+builder.Services.AddSingleton(new CentralLicenseOptions
+{
+    Required = runtimeConfiguration.Central.LicenseRequired,
+    LicenseFile = runtimeConfiguration.Central.LicenseFile,
+    PublicKeyFile = runtimeConfiguration.Central.LicensePublicKeyFile
+});
+builder.Services.AddSingleton<ICentralLicenseService, SignedCentralLicenseService>();
+if (runtimeConfiguration.Central.Enabled
+    && (runtimeConfiguration.Central.AuthenticationMode is CentralAuthenticationMode.Oidc or CentralAuthenticationMode.Hybrid))
+{
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.Authority = runtimeConfiguration.Central.OidcAuthority!.ToString().TrimEnd('/');
+            options.Audience = runtimeConfiguration.Central.OidcAudience;
+            options.RequireHttpsMetadata = true;
+            options.MapInboundClaims = false;
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                ClockSkew = TimeSpan.FromMinutes(2)
+            };
+        });
+}
 builder.Services.AddSingleton<ILocalDiagnosticsService, LocalDiagnosticsService>();
 builder.Services.AddCors(options =>
 {
@@ -227,8 +261,21 @@ builder.Services.AddSingleton<IUiPathAnalysisHistoryService, UiPathAnalysisHisto
 
 var app = builder.Build();
 
+var servesWebClient = Directory.Exists(app.Environment.WebRootPath)
+    && File.Exists(Path.Combine(app.Environment.WebRootPath, "index.html"));
+if (servesWebClient)
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+}
 app.UseCors("DesktopLocalhost");
 app.UseMiddleware<LocalDiagnosticsMiddleware>();
+if (runtimeConfiguration.Central.Enabled
+    && (runtimeConfiguration.Central.AuthenticationMode is CentralAuthenticationMode.Oidc or CentralAuthenticationMode.Hybrid))
+{
+    app.UseAuthentication();
+}
+app.UseMiddleware<CentralAccessMiddleware>();
 app.Use(async (context, next) =>
 {
     var disabledFeature = DisabledFeatureForPath(context.Request.Path, runtimeConfiguration.FeatureFlags);
@@ -247,6 +294,10 @@ app.Use(async (context, next) =>
     });
 });
 app.MapControllers();
+if (servesWebClient)
+{
+    app.MapFallbackToFile("index.html");
+}
 
 app.Run();
 

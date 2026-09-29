@@ -18,6 +18,8 @@
     "desktop:dev": "npm run tauri:dev --workspace frontend",
     "desktop:build": "npm run frontend:build && npm run backend:publish:win && npm run tauri:build --workspace frontend",
     "desktop:build:linux": "npm run frontend:build && npm run backend:publish:linux && npm run tauri:build:linux --workspace frontend",
+    "onprem:config": "docker compose --env-file deploy/onprem/.env -f deploy/onprem/compose.yaml config",
+    "onprem:build": "docker compose --env-file deploy/onprem/.env -f deploy/onprem/compose.yaml build",
     "quality-gate": "node scripts/quality-gate.mjs",
     "quality-gate:test": "node --test scripts/quality-gate.test.mjs"
   }

@@ -1577,6 +1577,22 @@ Linux packaging is defined by `npm run desktop:build:linux` and `.github/workflo
 
 Runtime configuration is centralized under the `RpaDevAssistant` configuration section and supports standard .NET environment overrides (`__` separator). Safe defaults are included in `src/RpaDevAssistant.Api/appsettings.json` for local desktop use. Configurable values include the desktop CORS allowlist, custom rule/profile storage files, analysis history root/retention, and official package metadata timeout/cache settings. Startup fails with a clear validation error for malformed origins, non-HTTPS metadata endpoints, or non-positive durations.
 
+### Central Mode
+
+Central mode is opt-in and disabled by default, so the local desktop contract is unchanged. Enable it with `RpaDevAssistant__Central__Enabled=true`, configure a dedicated storage root, and provide `RPADA_CENTRAL_BOOTSTRAP_API_KEY` with at least 32 characters. The bootstrap key is only for initial tenant and administrator provisioning. Issued user API keys are returned once and only SHA-256 hashes are stored.
+
+Central endpoints under `/api/central` provide tenant-scoped users, roles, teams, registered UiPath projects, rule profiles, analysis history, audit events, quotas, and dashboard trends. Central analyses accept a registered project ID rather than a caller-supplied filesystem path. Registered roots must exist, contain `project.json`, resolve symlinks, and cannot be assigned across tenants.
+
+When central mode is enabled, **Company Workspace** appears in the application navigation. Its access token remains in React session memory and is not written to `localStorage`. The workspace provides tenant branding, user/role provisioning, one-time API key issuance, teams, governed project registration/execution, tenant rule profiles, quality trends, quota usage, analysis history, and role-filtered audit history.
+
+Authentication modes are `ApiKey`, `Oidc`, and `Hybrid`. OIDC mode requires an HTTPS authority and audience. The configured tenant and subject claims are mapped to a pre-provisioned tenant/user; provider role claims are not trusted, because authorization always uses the internal Viewer/Developer/Manager/TenantAdmin/SystemAdmin role. A live enterprise identity provider is still required for deployment acceptance.
+
+Offline licensing is optional for internal installations and fail-closed when enabled. Configure `RpaDevAssistant__Central__License__Required=true`, a signed license file, and the RSA public-key file. RSA-PSS/SHA-256 verification protects the license payload; expiration, plan level, active-tenant limit, and monthly-analysis entitlement are enforced before central operations. The private signing key is never deployed. `scripts/issue-central-license.mjs` is the operator-side issuer utility.
+
+Central audit records use an append-only SHA-256 hash chain. Reads and new writes fail closed after tampering, while `/api/central/audit/export` provides a tenant-scoped schema-versioned export with integrity status. Legacy audit lines remain readable and become protected by the next chained event.
+
+The current central catalog is an atomic, process-local file store intended for a single-instance on-premise deployment. A non-root container deployment is provided in `deploy/onprem`: it serves the compiled frontend and API from one origin, binds to loopback by default, mounts governed projects read-only, and persists catalog/history in a named volume. See `deploy/onprem/README.md`. Docker was not available in the development host used for this implementation, so an actual container build remains a deployment acceptance step. Multi-instance SaaS deployment requires a transactional shared persistence provider before production use.
+
 Example overrides:
 
 ```bash

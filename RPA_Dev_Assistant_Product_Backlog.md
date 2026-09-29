@@ -213,32 +213,32 @@ Kurallar:
 
 ## 12. Company Internal Version
 
-- [ ] Şirket içi merkezi kullanım
-- [ ] Kullanıcı yönetimi
-- [ ] Rol ve yetki yönetimi
-- [ ] SSO
-- [ ] Merkezi/kurumsal audit log
-- [ ] Merkezi çok kullanıcılı rule/profile governance
-- [ ] Merkezi analysis history
-- [ ] Takım bazlı projeler
-- [ ] Şirket dashboard’u
-- [ ] Proje kalite trendleri
-- [ ] Developer/team bazlı kalite metrikleri
-- [ ] On-premise deployment
+- [ ] Şirket içi merkezi kullanım — Kısmi: Opt-in central mode, güvenli kayıtlı proje analizi, tenant izolasyonu, kimlik doğrulama, kota, hash-chain audit, history, şirket dashboard’u ve merkezi web/admin deneyimi hazır; gerçek şirket ağı/IdP/container kabulü bekliyor.
+- [x] Kullanıcı yönetimi — Tenant-scoped kullanıcı provision/deactivate, rol/team ataması ve yalnız oluşturma/rotasyon yanıtında gösterilen 256-bit API anahtarı desteklenir; anahtarın yalnız SHA-256 özeti kalıcılaştırılır.
+- [x] Rol ve yetki yönetimi — Viewer, Developer, Manager, TenantAdmin ve SystemAdmin rolleri endpoint ve tenant kapsamlarında uygulanır; dış kimlik sağlayıcının rol claim’leri yetki kaynağı olarak kullanılmaz.
+- [ ] SSO — Kısmi: HTTPS authority/audience doğrulamalı OIDC JWT, configurable tenant/subject claim mapping ve internal role eşlemesi hazır; gerçek kurumsal IdP ile canlı kabul testi bekliyor.
+- [x] Merkezi/kurumsal audit log — Tenant-scoped yönetim ve analiz mutasyonları actor, operation id, resource, outcome ve UTC zamanıyla append-only JSONL audit’e yazılır.
+- [x] Merkezi çok kullanıcılı rule/profile governance — TenantAdmin tarafından yönetilen tenant profile’ları built-in profile’ları tenant kapsamında override eder ve central analiz hattı exact profile nesnesini kullanır.
+- [x] Merkezi analysis history — Merkezi analizler tenant/project/user/team/profile kimliği, durum, score, grade ve finding metrikleriyle kalıcı tutulur; yetkiye göre filtrelenen history API’si bulunur.
+- [x] Takım bazlı projeler — Kullanıcı-team üyeliği, project-team ataması ve Viewer/Developer görünürlüğü tenant içinde uygulanır; cross-tenant üyelik/path ataması reddedilir.
+- [x] Şirket dashboard’u — Tenant-scoped proje/son analiz/kota/trend/team/developer metrikleri Company Workspace ekranında gösterilir; yönetilen proje analizi aynı ekrandan çalıştırılabilir.
+- [x] Proje kalite trendleri — Central dashboard her yetkili proje için zaman sıralı score, grade ve finding trendi döndürür.
+- [x] Developer/team bazlı kalite metrikleri — Tamamlanan analizler üzerinden tenant-scoped analysis count ve average score metrikleri üretilir.
+- [ ] On-premise deployment — Kısmi: Non-root tek-origin container, read-only proje mount’u, kalıcı data volume’u, loopback binding, healthcheck, OIDC/API-key environment contract’ı ve Compose runbook’u hazır; geliştirme hostunda Docker bulunmadığından gerçek image build/deployment kabulü bekliyor.
 
 ## 13. Enterprise / Customer Version
 
-- [ ] Multi-tenant yapı
-- [ ] Müşteri bazlı izolasyon
-- [ ] Müşteri bazlı rule profile
-- [ ] Müşteri bazlı branding
-- [ ] Lisanslama
-- [ ] Subscription modeli
-- [ ] Kullanım kotası
-- [ ] Enterprise SSO
-- [ ] Audit / compliance
-- [ ] Customer admin panel
-- [ ] On-premise seçeneği
+- [x] Multi-tenant yapı — Tenant kimliği kullanıcı, takım, proje, profile, analiz history ve audit kayıtlarının zorunlu partition key’idir; system admin dışındaki tüm sorgular internal principal tenant’ına scope edilir.
+- [x] Müşteri bazlı izolasyon — Cross-tenant team membership, görünürlük, profile/history erişimi ve aynı canonical/symlink-resolved project root’un farklı tenant’a atanması testlerle engellenir.
+- [x] Müşteri bazlı rule profile — Aynı profile ID farklı tenant’larda bağımsız saklanır ve yalnız ilgili tenant analizinde uygulanır.
+- [ ] Müşteri bazlı branding — Kısmi: Tenant branding name/accent metadata’sı merkezi katalogda izole saklanıyor ve merkezi oturumda uygulama başlığı/brand rengine uygulanıyor; tenant branding’in merkezi report export’a taşınması bekliyor.
+- [x] Lisanslama — Opsiyonel offline lisanslar RSA-PSS/SHA-256 ile doğrulanır; süre, plan, aktif tenant ve aylık analiz limitleri fail-closed uygulanır, private key deployment’a girmez ve operator issuer aracı/testleri bulunur.
+- [ ] Subscription modeli — Kısmi: Internal, Trial, Team ve Enterprise planı, imzalı entitlement süresi ve quota enforcement hazır; ödeme/billing sağlayıcısı, renewal ve invoice lifecycle yok.
+- [x] Kullanım kotası — Aylık tenant analiz rezervasyonu atomik olarak sayılır, limit öncesi uygulanır ve dashboard’da kullanım/limit birlikte raporlanır.
+- [ ] Enterprise SSO — Kısmi: OIDC JWT ve provision edilmiş federated subject/tenant mapping hazır; Entra ID/Okta canlı kabul testi ve provisioning otomasyonu bekliyor.
+- [ ] Audit / compliance — Kısmi: Tenant-scoped append-only SHA-256 hash chain, fail-closed tamper detection ve schema-versioned export hazır; kurumsal retention policy ve bağımsız compliance kabulü bekliyor.
+- [x] Customer admin panel — Merkezi çalışma alanı tenant, branding, kullanıcı/rol, tek-seferlik API key, ekip, proje, rule profile, quota/dashboard, history ve audit yönetimini mevcut yetki contract’ıyla sunar.
+- [ ] On-premise seçeneği — Kısmi: Tek instance için container/Compose paketi ve güvenli deployment runbook’u hazır; gerçek Docker host acceptance ve TLS reverse proxy kurulumu bekliyor.
 - [ ] SaaS seçeneği
 - [x] Private AI provider desteği
 
@@ -303,11 +303,11 @@ Kurallar:
 
 ## İnceleme Özeti
 
-**Son inceleme tarihi:** 2026-09-18
+**Son inceleme tarihi:** 2026-09-24
 **İnceleyen:** Codex
-**Tamamlanan madde sayısı:** 164
-**Kısmi madde sayısı:** 0
-**Bekleyen madde sayısı:** 60
+**Tamamlanan madde sayısı:** 213
+**Kısmi madde sayısı:** 9
+**Bekleyen madde sayısı:** 11
 
 ### Notlar
 

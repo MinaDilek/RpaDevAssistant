@@ -3,7 +3,7 @@ import type { AnalysisResponse, CustomRuleDefinition, RuleCatalogItem, RuleProfi
 import type { Locale } from '../localization';
 
 export type HealthState = 'checking' | 'ready' | 'unavailable';
-export type ActiveTab = 'overview' | 'findings' | 'history' | 'workflows' | 'dependencies' | 'orchestrator' | 'flowchartConverter' | 'config' | 'report' | 'ask' | 'processPdd' | 'rules' | 'settings';
+export type ActiveTab = 'overview' | 'findings' | 'history' | 'workflows' | 'dependencies' | 'orchestrator' | 'flowchartConverter' | 'config' | 'report' | 'ask' | 'processPdd' | 'rules' | 'central' | 'settings';
 
 export function Metric({ label, value }: { label: string; value: React.ReactNode }) {
   return (

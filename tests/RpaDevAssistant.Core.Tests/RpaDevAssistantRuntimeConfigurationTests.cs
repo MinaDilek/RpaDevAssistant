@@ -42,4 +42,38 @@ public sealed class RpaDevAssistantRuntimeConfigurationTests
 
         Assert.Throws<InvalidOperationException>(() => RpaDevAssistantRuntimeConfiguration.Load(configuration));
     }
+
+    [Fact]
+    public void Load_CentralModeRequiresStrongBootstrapKey()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["RpaDevAssistant:Central:Enabled"] = "true",
+                ["RpaDevAssistant:Central:BootstrapApiKey"] = "too-short"
+            })
+            .Build();
+
+        var error = Assert.Throws<InvalidOperationException>(() => RpaDevAssistantRuntimeConfiguration.Load(configuration));
+
+        Assert.Contains("32 characters", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Load_OidcCentralModeRequiresHttpsAuthorityAndAudience()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["RpaDevAssistant:Central:Enabled"] = "true",
+                ["RpaDevAssistant:Central:BootstrapApiKey"] = "central-bootstrap-key-with-at-least-32-characters",
+                ["RpaDevAssistant:Central:Authentication:Mode"] = "Oidc",
+                ["RpaDevAssistant:Central:Authentication:OidcAuthority"] = "https://login.example.test/tenant"
+            })
+            .Build();
+
+        var error = Assert.Throws<InvalidOperationException>(() => RpaDevAssistantRuntimeConfiguration.Load(configuration));
+
+        Assert.Contains("audience", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }

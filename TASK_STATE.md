@@ -1,5 +1,14 @@
 # Current Task
 
+## 2026-09-24 Central company workspace and on-prem foundation
+
+- Added tenant-isolated central catalog, roles, API key/OIDC authentication, governed project analysis, quotas, rule profiles, history, quality metrics, and a functional TR/EN Company Workspace UI.
+- Central credentials remain session-memory only; user API keys are shown once and persisted only as SHA-256 hashes.
+- Added append-only tamper-evident audit chaining and tenant-scoped integrity export.
+- Added optional RSA-PSS/SHA-256 offline licensing with expiry, plan, active-tenant, and monthly-analysis entitlement enforcement plus an operator-side issuer utility.
+- Added a non-root, single-origin on-prem container/Compose package with read-only project mounts and persistent application data.
+- Focused central backend tests passed 18/18 and focused frontend tests passed 5/5. Docker image execution remains unvalidated because Docker is unavailable on this host.
+
 ## Status
 IN PROGRESS
 
@@ -142,5 +151,10 @@ Continue reviewing remaining unchecked backlog items only when requested.
 - Added the Tauri v2 signed updater client, Settings/About update UI, protected GitHub updater key, and tag-release manifest publishing workflow; live installed-app upgrade remains pending until the first signed release is published.
 - Completed Linux desktop packaging validation on Ubuntu 22.04 in GitHub Actions run `36051909068`; the generated 0.1.0 `.deb` and AppImage artifacts passed non-empty package and bundled sidecar checks.
 - Downloaded and independently hashed the Linux artifacts: `.deb` `48fc63a1dc211fe653a2137851ff3843a6c90ee7f3ea75eb599f24d4944ff251`, AppImage `e124898d8738225f9d3dd7e6d21ae7da315c19b81d2ad1ade223c6325a4c7c44`.
+- Added opt-in central mode with tenant-scoped users, fixed internal roles, teams, registered projects, one-time API keys with stored SHA-256 hashes, append-only audit, customer rule profiles, atomic monthly quota enforcement, central analysis history, and dashboard/trend/team/developer metrics.
+- Added hybrid API-key/OIDC JWT authentication with HTTPS authority/audience validation and provisioned tenant/subject mapping; external role claims never grant authorization.
+- Enforced canonical project-root isolation across tenants, including `project.json` validation and final symlink target resolution; central analysis accepts registered project IDs rather than arbitrary paths.
+- Fixed an existing profile semantic defect where custom rules absent from the selected profile still executed; custom rules now follow the same explicit profile enablement contract as built-in rules.
+- Verified the central/profile implementation with 45 focused tests and 588/588 full backend tests.
 - Preserve existing architecture.
 - Update this file after meaningful progress.
