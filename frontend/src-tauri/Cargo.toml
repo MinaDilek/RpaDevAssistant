@@ -1,6 +1,6 @@
 [package]
 name = "rpadevassistant-desktop"
-version = "0.1.2"
+version = "0.1.3"
 description = "RPA Dev Assistant desktop shell"
 authors = ["RPA Dev Assistant"]
 edition = "2021"
