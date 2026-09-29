@@ -111,7 +111,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          $assets = Get-ChildItem "frontend/src-tauri/target/release/bundle/nsis" | Where-Object { $_.Name -eq "latest.json" -or $_.Name -like "*.nsis.zip" -or $_.Name -like "*.nsis.zip.sig" -or $_.Name -like "*-setup.exe" }
+          $assets = Get-ChildItem "frontend/src-tauri/target/release/bundle/nsis" | Where-Object { $_.Name -eq "latest.json" -or $_.Name -like "*.nsis.zip" -or $_.Name -like "*.nsis.zip.sig" -or $_.Name -like "*-setup.exe" -or $_.Name -like "*-setup.exe.sig" }
           if (-not $assets) { throw "No updater release assets were produced." }
           gh release view $env:GITHUB_REF_NAME *> $null
           if ($LASTEXITCODE -ne 0) { gh release create $env:GITHUB_REF_NAME --title "RPA Dev Assistant $env:GITHUB_REF_NAME" --generate-notes }

@@ -9,15 +9,16 @@ if (!repository || !tag || !tag.startsWith('v')) {
 
 const bundleDirectory = path.resolve('frontend/src-tauri/target/release/bundle/nsis');
 const files = await readdir(bundleDirectory);
-const archiveName = files.find((file) => file.endsWith('.nsis.zip'));
-if (!archiveName || !files.includes(`${archiveName}.sig`)) {
-  throw new Error('A signed NSIS updater archive and signature were not produced.');
+const updaterName = files.find((file) => file.endsWith('-setup.exe') && files.includes(`${file}.sig`))
+  ?? files.find((file) => file.endsWith('.nsis.zip') && files.includes(`${file}.sig`));
+if (!updaterName) {
+  throw new Error('A signed NSIS updater and signature were not produced.');
 }
 
-const signature = (await readFile(path.join(bundleDirectory, `${archiveName}.sig`), 'utf8')).trim();
+const signature = (await readFile(path.join(bundleDirectory, `${updaterName}.sig`), 'utf8')).trim();
 if (!signature) throw new Error('Updater signature is empty.');
 
-const encodedAsset = archiveName.split('/').map(encodeURIComponent).join('/');
+const encodedAsset = updaterName.split('/').map(encodeURIComponent).join('/');
 const manifest = {
   version: tag.slice(1),
   notes: `RPA Dev Assistant ${tag}`,
