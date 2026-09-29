@@ -10,7 +10,7 @@
 - Added a non-root, single-origin on-prem container/Compose package with read-only project mounts and persistent application data.
 - Added tenant-branded central report export using the registered project and exact tenant profile; report analysis is role- and quota-governed and recorded in central history.
 - GitHub Actions run `36583280992` successfully validated the on-prem image build, health endpoint, frontend delivery, and central mode.
-- Published Tauri-signed Windows updater release `v0.1.2`; run `36587369163` passed backend/frontend validation, NSIS build, silent-install smoke testing, updater signing, and release publication. The public manifest and asset URL were verified after publication.
+- Published Tauri-signed Windows updater release `v0.1.3`; run `36621740903` passed backend/frontend validation, NSIS build, silent-install smoke testing, updater signing, and release publication. Run `36623676197` then upgraded an installed `v0.1.2` copy to `v0.1.3` and verified manifest/signature consistency, product version replacement, sidecar continuity, and preserved user data.
 - Focused central API tests pass 5/5 and focused frontend tests pass 5/5.
 
 ## Status

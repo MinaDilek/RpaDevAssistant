@@ -244,7 +244,7 @@ Kurallar:
 
 ## 14. Product Platform
 
-- [ ] Auto-update — Kısmi: Tauri v2 signed updater, HTTPS GitHub Releases endpoint, desktop-only background check, explicit install/relaunch UI ve TR/EN states hazır. `v0.1.2` release’i run `36587369163` ile üretildi; signed `setup.exe`, `.sig` ve erişilebilir `latest.json` dışarıdan doğrulandı. Önceki kurulu sürümden gerçek upgrade acceptance henüz yapılmadı.
+- [x] Auto-update — Tauri v2 signed updater, HTTPS GitHub Releases endpoint, desktop-only background check, explicit install/relaunch UI ve TR/EN states hazırdır. `v0.1.3` release’i run `36621740903` ile üretildi; kurulu `v0.1.2` sürümünün aynı dizinde `v0.1.3` sürümüne yükseltilmesi run `36623676197` içindeki `installed-update-acceptance` job’unda doğrulandı. Kabul; manifest/detached signature eşleşmesini, erişilebilir updater paketini, kurulu binary ve ürün sürümünün değişmesini, sidecar varlığını ve kullanıcı verisinin korunmasını kapsar.
 - [x] Telemetry / kullanım istatistikleri
 - [x] Crash reporting
 - [x] Plugin/modül sistemi — Versioned/schema-validated deklaratif JSON modülleri custom rule ve custom profile’ları birlikte taşır; import tamamı doğrulanmadan başlamaz, built-in `RPA*` kimlikleri korunur ve executable plugin code kabul edilmez.
@@ -305,9 +305,9 @@ Kurallar:
 
 **Son inceleme tarihi:** 2026-09-29
 **İnceleyen:** Codex
-**Tamamlanan madde sayısı:** 218
-**Kısmi madde sayısı:** 5
-**Bekleyen madde sayısı:** 6
+**Tamamlanan madde sayısı:** 219
+**Kısmi madde sayısı:** 4
+**Bekleyen madde sayısı:** 5
 
 ### Notlar
 
